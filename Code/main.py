@@ -1,15 +1,15 @@
-import pygame
-pygame.init()
+from settings import *
+from game import *
+import socket
+import threading
+import json
+import time
 
-running = True
-dt = 0
-WINDOW_WIDTH, WINDOW_HEIGHT = 1280,720
-FPS = 60
+if __name__ == '__main__':
+    game = Game()
+    game.run()
 
-screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-clock = pygame.time.Clock()
-pygame.display.set_caption("Ultra Pong")
-
+"""
 #jogador
 player_sprite = pygame.Rect(20, screen.get_height()/2 - 120/2,40,  120)
 player_score =0
@@ -29,18 +29,14 @@ enemy_score = 0
 
 while running:
     
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
+    
 
-    screen.fill("Black")
+    
     #desenhos
     #pygame.draw.circle(screen,"red",player_pos,40)
     pygame.draw.rect(screen,"red", player_sprite)
     pygame.draw.rect(screen, "blue", enemy_sprite)
     screen.blit(circle_surf,circle_rect)
-
-    keys = pygame.key.get_pressed()
 
     #jogador
     if keys[pygame.K_w] and player_sprite.top > 0:
@@ -75,7 +71,7 @@ while running:
     if (enemy_sprite.centery > circle_rect.centery) and (enemy_sprite.bottom < WINDOW_HEIGHT):
         enemy_sprite.y -= enemy_direction*dt
         if enemy_sprite.bottom > WINDOW_HEIGHT:
-            enemy_sprite.bottom = WINDOW_HEIGHT -1
+            enemy_sprite.bottom = WINDOW_HEIGHT -10
 
     #colisao
     if circle_rect.colliderect(player_sprite) and circle_speed.x < 0: #player
@@ -87,10 +83,7 @@ while running:
 
     pygame.display.flip()
 
-    print(f"Jogardor: {player_score}\n")
+    print(f"Jogador: {player_score}\n")
     print(f"Inimigo: {enemy_score}\n")
 
-
-    dt = clock.tick(FPS) / 1000
-
-pygame.quit()
+"""
