@@ -18,11 +18,14 @@ class Paddle(pygame.sprite.Sprite):
         self.vel = 0.0
         self.acceleration = 600.0
         self.deceleration = 500.0
+        self.k = 2.0
 
         #charging variables
         self.charge_time = 0.0
         self.charge_max = 1.5
-        self.launch_multiplier = 2.0
+        self.tap_treshold = 0.20
+        self.tap_multiplier = 0.5
+        self.charge_multiplier = 2.5
         self.is_charging = False
         self.prev_input = 0
 
@@ -47,18 +50,20 @@ class Paddle(pygame.sprite.Sprite):
                 #making the plyer stay in the screen
                 if self.rect.top < 0:
                     self.rect.top = 0
-                    self.vel = -self.vel/2
+                    self.vel = -self.vel*2/3
                 elif self.rect.bottom > WINDOW_HEIGHT:
                     self.rect.bottom = WINDOW_HEIGHT
-                    self.vel = -self.vel/2
+                    self.vel = -self.vel*2/3
                 #friction
                 if self.vel > 0:
-                    self.vel-= self.deceleration*dt
+                    #self.vel-= self.deceleration*dt
+                    self.vel *= max(0.0, 1.0 - self.k*dt)
                     #min speed
-                    self.vel = 0 if self.vel < 0 else self.vel
                 elif self.vel < 0:
-                    self.vel += self.deceleration * dt
-                    self.vel = 0 if self.vel > 0 else self.vel
+                    #self.vel += self.deceleration * dt
+                    self.vel *= max(0.0, 1.0 -self.k*dt)
+                if abs(self.vel) < 10.0:
+                    self.vel = 0.0
 
     def charge(self, dt):
         if self.direction != 0:
@@ -69,16 +74,21 @@ class Paddle(pygame.sprite.Sprite):
         
         else:
             if self.is_charging:
-                power = self.charge_time / self.charge_max
-                launch_speed = self.max_speed * (0.5 + power * self.launch_multiplier)
+
+                if self.charge_time < self.tap_treshold:
+                    launch_speed = self.max_speed * self.tap_multiplier
+                
+                else:
+                    power = self.charge_time / self.charge_max
+                    launch_speed = self.max_speed * (1.0 + power * self.charge_multiplier)
 
                 launch_speed = self.max_launch_speed if launch_speed> self.max_launch_speed else launch_speed
 
                 self.vel = launch_speed * (1 if self.prev_input > 0 else - 1)
 
                 #max_vel
-                self.vel = self.max_speed if self.vel > self.max_speed else self.vel
-                self.vel = -self.max_speed if self.vel < -self.max_speed else self.vel
+                self.vel = self.max_launch_speed if self.vel > self.max_launch_speed else self.vel
+                self.vel = -self.max_launch_speed if self.vel < -self.max_launch_speed else self.vel
 
                 #resetting
                 self.charge_time = 0.0
