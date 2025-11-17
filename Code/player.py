@@ -1,5 +1,5 @@
 from settings import *
-from random import choice, uniform
+from inputhandler import *
 
 class Paddle(pygame.sprite.Sprite):
     def __init__(self, team, groups):
@@ -104,29 +104,29 @@ class Paddle(pygame.sprite.Sprite):
         self.get_direction()
         self.charge(dt)
         self.move(dt)
-        print(self.vel)
+        #print(self.vel)
     
 class Player(Paddle):
     
-    def __init__(self, team, groups):
+    def __init__(self, team, input_handler, groups):
         super().__init__(team,groups)
-
+        self.team = team
         #movement
         self.max_speed = OBJECTS_SPEED['player']
+        self.input_handler = input_handler
         
         #launch
         self.max_launch_speed = self.max_speed*1.5
         
 
     def get_direction(self):
-        keys = pygame.key.get_pressed()
-        self.direction = int(keys[pygame.K_s]) - int(keys[pygame.K_w])
-
+        self.direction = self.input_handler.get_direction(self.team)
 
 class Ball(pygame.sprite.Sprite):
-    def __init__(self, groups, paddle_sprites):
+    def __init__(self, groups, paddle_sprites, update_score):
         super().__init__(groups)
         self.paddle_sprites = paddle_sprites
+        self.update_score  = update_score
 
          #image of the ball
         self.image = pygame.Surface(OBJECTS_SIZE['ball'], pygame.SRCALPHA)
@@ -137,14 +137,30 @@ class Ball(pygame.sprite.Sprite):
         self.old_rect = self.rect.copy()
          #movement
         self.direction = pygame.Vector2(choice((1,-1)),uniform(0.7,0.8) * choice((-1,1)))
+        self.speed = OBJECTS_SPEED['ball']
+        self.is_frozen = False
+
+        #trail
+        self.trail = deque(maxlen = 6)
+        self.trail_life = 0.4
+        self.trail_spacing = 0.08
+        self.last_trail_time = 0
         
+           
     def move(self, dt):
-        self.rect.x += self.direction.x * OBJECTS_SPEED['ball'] * dt
+        if self.is_frozen:
+            return
+
+        self.rect.x += self.direction.x * self.speed * dt
         self.paddle_collission('horizontal')
-        self.rect.y += self.direction.y * OBJECTS_SPEED['ball'] * dt
+        self.rect.y += self.direction.y * self.speed * dt
         self.paddle_collission('vertical')
 
     def wall_collision(self):
+
+        if self.is_frozen:
+            return 
+
         #top window collision
         if self.rect.top < 0:
             self.rect.top = 0
@@ -155,21 +171,24 @@ class Ball(pygame.sprite.Sprite):
             self.rect.bottom = WINDOW_HEIGHT
             self.direction.y *= -1
 
+        #getting score
+        if self.rect.left  <= 0 or self.rect.right >= WINDOW_WIDTH:
+            self.update_score('TEAM_1' if self.rect.x < WINDOW_WIDTH/2 else 'TEAM_2')
+            self.reset()
+
+        '''
         #for developing
         if self.rect.right > WINDOW_WIDTH:
             self.rect.right = WINDOW_WIDTH
             self.direction.x*=-1
-    
+        '''
+
     def paddle_collission(self, direction):
         for sprite in self.paddle_sprites:
             if sprite.rect.colliderect(self.rect):
                 if direction == 'horizontal':
-                    if self.rect.right > sprite.rect.left and self.old_rect.right <= sprite.old_rect.left:
-                        self.rect.right = sprite.rect.left
-                        self.direction.x *=-1
-                    elif self.rect.left < sprite.rect.right and self.old_rect.left >= sprite.old_rect.left:
-                        self.rect.left = self.rect.right
-                        self.direction.x *=-1
+                    self._handle_paddle_collision(sprite)
+
                 else:
                     if self.rect.bottom >= sprite.rect.top and self.old_rect.bottom <= sprite.old_rect.top:
                         self.rect.bottom = sprite.rect.top
@@ -177,8 +196,122 @@ class Ball(pygame.sprite.Sprite):
                     elif self.rect.top <= sprite.rect.bottom and self.old_rect.top >= sprite.old_rect.bottom:
                         self.rect.top = sprite.rect.bottom
                         self.direction.y*=-1
+
+                ''' here is old collision method
+                    if self.rect.right > sprite.rect.left and self.old_rect.right <= sprite.old_rect.left:
+                        self.rect.right = sprite.rect.left
+                        self.direction.x *=-1
+                    elif self.rect.left < sprite.rect.right and self.old_rect.left >= sprite.old_rect.left:
+                        self.rect.left = self.rect.right
+                        self.direction.x *=-1
+                '''
     
+    def _handle_paddle_collision(self, paddle):
+        relative_intersect_y = (paddle.rect.centery - self.rect.centery)/ paddle.rect.height/2
+
+        #limiting value bet -1 and 1
+        relative_intersect_y = max(-1, min(1,relative_intersect_y))
+
+        smooth_intersect = relative_intersect_y * abs(relative_intersect_y)
+        #defining angle
+        max_bounce_angle = pi/3
+
+        bounce_angle = smooth_intersect * max_bounce_angle
+
+        #finding which team is the paddle from
+        if paddle.rect.centerx < WINDOW_WIDTH / 2:
+            new_direction_x = 1
+        else:
+            new_direction_x = -1
+        
+        #applying angle
+        self.direction.x = new_direction_x * cos(bounce_angle)
+        self.direction.y = -sin(bounce_angle)
+
+
+        #paddle effect in the bounce
+        if abs(paddle.vel) > 150:
+            paddle_effect = (paddle.vel / paddle.max_launch_speed )* 0.3
+            self.direction.y -= paddle_effect
+
+        #normalizing vector
+        self.direction = self.direction.normalize()
+
+        #increasing speed after bouncing in the paddle
+        self.speed = min(self.speed * 1.05, OBJECTS_SPEED['ball']*2)
+
+        self._prevent_stuck(paddle)
+
+    def _prevent_stuck(self, paddle):
+
+        if self.direction.x > 0 and paddle.rect.centerx < WINDOW_WIDTH / 2:
+            self.rect.left = paddle.rect.right + 3
+        elif self.direction.x < 0 and paddle.rect.centerx > WINDOW_WIDTH / 2:
+            self.rect.right = paddle.rect.left - 3
+
+    def draw_trail(self, surface):
+        if not self.trail:
+            return
+            
+        for i, (x, y, life, size) in enumerate(self.trail):
+            progress = i / len(self.trail) 
+            life_progress = life / self.trail_life 
+            
+            # time dilation size
+            current_size = int(size * (1 - progress * 0.7) * life_progress)
+            
+            if current_size <= 0:
+                continue
+                
+            # opacity time dilation
+            alpha = int(255 * (1 - progress * 0.5) * life_progress)
+            
+            if alpha <= 0:
+                continue
+                
+            # trail draw
+            trail_surf = pygame.Surface((current_size * 2, current_size * 2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surf, (255, 255, 255, alpha), 
+                             (current_size, current_size), current_size)
+            
+            # Desenha no display
+            surface.blit(trail_surf, (int(x) - current_size, int(y) - current_size))
+    
+    def _update_trail(self, dt):
+        
+        self.last_trail_time += dt
+        if self.last_trail_time >= self.trail_spacing:
+            
+            base_size = OBJECTS_SIZE['ball'][0] // 2
+            self.trail.appendleft([
+                self.rect.centerx, 
+                self.rect.centery, 
+                self.trail_life,
+                base_size
+            ])
+            self.last_trail_time = 0
+        
+        #update every trail
+        for sample in self.trail:
+            sample[2] -= dt 
+        
+        #remove small ones
+        while self.trail and self.trail[-1][2] <= 0:
+            self.trail.pop()
+
+    def reset(self):
+        self.rect.center = OBJECTS_POSITION['ball']
+        self.direction = pygame.Vector2(0,0)
+        self.is_frozen = True
+        self.speed = OBJECTS_SPEED['ball']
+
+    def launch_after_countdown(self):
+        self.is_frozen = False
+        self.direction = pygame.Vector2(choice((1,-1)), uniform(0.7,0.8) * choice((-1,1)))
+        self.speed = OBJECTS_SPEED['ball']
+
     def update(self, dt):
         self.old_rect = self.rect.copy()
+        self._update_trail(dt)
         self.move(dt)
         self.wall_collision()
