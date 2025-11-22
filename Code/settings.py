@@ -3,6 +3,7 @@ from os.path import join
 from random import choice, uniform
 from collections import deque
 from math import pi, cos,sin
+from enum import Enum, auto
 
 WINDOW_WIDTH, WINDOW_HEIGHT = 1280,720
 FPS = 60
@@ -20,3 +21,9 @@ OBJECTS_COLORS = {'TEAM_1':'#d13f3f',
 OBJECTS_SPEED = {'player': 500, 'ball': 400}
 
 COUNTDOWN = {'ball': 3.0}
+
+class GameState(Enum):
+    MENU = auto()
+    LOCAL_COOP = auto()
+    PAUSED = auto()
+

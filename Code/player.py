@@ -1,6 +1,7 @@
 from settings import *
 from inputhandler import *
 
+#abstraction layer of the paddles
 class Paddle(pygame.sprite.Sprite):
     def __init__(self, team, groups):
         super().__init__(groups)
@@ -28,7 +29,6 @@ class Paddle(pygame.sprite.Sprite):
         self.charge_multiplier = 2.5
         self.is_charging = False
         self.prev_input = 0
-
 
     def move(self, dt):
         #updating speed
@@ -106,22 +106,24 @@ class Paddle(pygame.sprite.Sprite):
         self.move(dt)
         #print(self.vel)
     
+#abstraction layer 
 class Player(Paddle):
     
     def __init__(self, team, input_handler, groups):
         super().__init__(team,groups)
         self.team = team
+        self.id = id
         #movement
         self.max_speed = OBJECTS_SPEED['player']
         self.input_handler = input_handler
         
         #launch
         self.max_launch_speed = self.max_speed*1.5
-        
-
+     
     def get_direction(self):
-        self.direction = self.input_handler.get_direction(self.team)
+        self.direction = self.input_handler.get_direction()
 
+#abstraction layer of the ball
 class Ball(pygame.sprite.Sprite):
     def __init__(self, groups, paddle_sprites, update_score):
         super().__init__(groups)
@@ -145,11 +147,11 @@ class Ball(pygame.sprite.Sprite):
         self.trail_life = 0.4
         self.trail_spacing = 0.08
         self.last_trail_time = 0
-        
+        self.trail_surfaces = None
            
     def move(self, dt):
-        if self.is_frozen:
-            return
+        #if self.is_frozen:
+           # return
 
         self.rect.x += self.direction.x * self.speed * dt
         self.paddle_collission('horizontal')
@@ -157,9 +159,6 @@ class Ball(pygame.sprite.Sprite):
         self.paddle_collission('vertical')
 
     def wall_collision(self):
-
-        if self.is_frozen:
-            return 
 
         #top window collision
         if self.rect.top < 0:
@@ -252,7 +251,30 @@ class Ball(pygame.sprite.Sprite):
     def draw_trail(self, surface):
         if not self.trail:
             return
-            
+        
+        if self.trail_surfaces is None:
+            self.trail_surfaces = {}
+        length = len(self.trail)
+  
+        for i, (x, y, life, base_size) in enumerate(reversed(self.trail)):
+            progress = i / length  
+            life_fraction = max(0.0, life / self.trail_life)
+      
+            size_scale = life_fraction * (0.8 + 0.6 * (1 - progress))
+            current_size = max(2, int(base_size * size_scale))
+            trail_surf = self.trail_surfaces.get(current_size)
+            if trail_surf is None:
+                trail_surf = pygame.Surface((current_size * 2, current_size * 2), pygame.SRCALPHA)
+                pygame.draw.circle(trail_surf, OBJECTS_COLORS['ball'], (current_size, current_size), current_size)
+                self.trail_surfaces[current_size] = trail_surf
+            alpha = int(255 * life_fraction * (1 - progress))
+            if alpha < 5:
+                continue
+            trail_surf.set_alpha(alpha)
+            surface.blit(trail_surf, (int(x) - current_size, int(y) - current_size))
+
+
+        '''OLD WAY    
         for i, (x, y, life, size) in enumerate(self.trail):
             progress = i / len(self.trail) 
             life_progress = life / self.trail_life 
@@ -276,6 +298,7 @@ class Ball(pygame.sprite.Sprite):
             
             # Desenha no display
             surface.blit(trail_surf, (int(x) - current_size, int(y) - current_size))
+        '''
     
     def _update_trail(self, dt):
         
@@ -302,11 +325,11 @@ class Ball(pygame.sprite.Sprite):
     def reset(self):
         self.rect.center = OBJECTS_POSITION['ball']
         self.direction = pygame.Vector2(0,0)
-        self.is_frozen = True
+        #self.is_frozen = True
         self.speed = OBJECTS_SPEED['ball']
 
     def launch_after_countdown(self):
-        self.is_frozen = False
+        #self.is_frozen = False
         self.direction = pygame.Vector2(choice((1,-1)), uniform(0.7,0.8) * choice((-1,1)))
         self.speed = OBJECTS_SPEED['ball']
 

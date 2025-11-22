@@ -1,12 +1,17 @@
 from settings import *
 
+#abstraction layer of input
 class InputHandler:
-    def __init__(self):
+    def __init__(self, up_key, down_key):
         self.actions = {
-            "move_up": [pygame.K_w, pygame.K_UP],
-            "move_down": [pygame.K_s, pygame.K_DOWN]
+            "move_up": [up_key],
+            "move_down": [down_key]
             #add more later
         }
+
+        #testing
+        self.up_key = up_key
+        self.down_key = down_key
 
     def get_action(self, action_name):
         keys = pygame.key.get_pressed()
@@ -15,10 +20,16 @@ class InputHandler:
                 return True
         return False
     
-    def get_direction(self, player_id):
+    def get_direction(self):
         #using this for singleplayer
         keys = pygame.key.get_pressed()
-        if player_id == "TEAM_1":
-            return int(keys[pygame.K_s]) - int(keys[pygame.K_w])
-        else:
-            return int(keys[pygame.K_DOWN]) - int(keys[pygame.K_UP])
+        return (keys[self.down_key] or 0) - (keys[self.up_key] or 0)
+
+        #old direction
+        """
+        if player_id == 1:
+            if player_team == "TEAM_1":
+                return int(keys[pygame.K_s]) - int(keys[pygame.K_w])
+            else:
+                return int(keys[pygame.K_DOWN]) - int(keys[pygame.K_UP])
+        """
