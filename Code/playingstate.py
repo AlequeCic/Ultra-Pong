@@ -3,6 +3,7 @@ from player import *
 from inputhandler import *
 from world import *
 from gamestate import BaseState
+from audio_manager import get_audio_manager
 
 class PlayingState(BaseState):
     FIXED_DT = 1/FPS
@@ -31,10 +32,15 @@ class PlayingState(BaseState):
     def enter(self, game_mode="local"):
         #pygame.mouse.set_visible(False)
         self.game_mode = game_mode
+        
+        # Start gameplay music
+        get_audio_manager().play_gameplay_music(intensity="normal", fade_ms=500)
 
         #initializing world variables
         self.world = World()
         self.accumulator = 0.0
+        
+        self.last_countdown_beep = None
 
         #initializing sprite groups
         self.all_sprites = pygame.sprite.Group()
@@ -43,7 +49,11 @@ class PlayingState(BaseState):
         #players config
         self.setup_players()
 
-        self.ball = Ball(self.all_sprites, self.paddle_sprites, self.update_score)
+        self.ball = Ball(self.all_sprites, self.paddle_sprites, self.on_goal_scored)
+
+        self.ball.reset()
+        self.world.start_countdown(3.0, FPS)  # 3 second countdown
+
     
     def setup_players(self):
         #singleplayer (TODO)
@@ -70,10 +80,24 @@ class PlayingState(BaseState):
         #TODO
         pass
 
-    def update_score(self, side):
-        self.world.score[side] += 1
-        self.world.start_countdown(3.0, FPS) # 3 seconds
-
+    def on_goal_scored(self, team):
+        """Callback when a goal is scored. Handles score, audio, and game state."""
+        self.world.score[team] += 1
+        self.world.start_countdown(3.0, FPS)
+        
+        # Play goal sound
+        get_audio_manager().play_goal(team)
+        
+        #if team score >= 9 play last goal music, elif >= 6 play high intensity
+        if self.world.score[team] >1:
+            get_audio_manager().play_last_goal()
+        elif self.world.score[team] >3:
+            get_audio_manager().play_gameplay_music(intensity="high")
+        
+        # Reset opponent streak
+        opponent = "TEAM_2" if team == "TEAM_1" else "TEAM_1"
+        
+        # Reset ball
         if self.ball:
             self.ball.reset() #put the ball in the middle and randomize its direction
 
@@ -94,12 +118,18 @@ class PlayingState(BaseState):
         remaining_ticks = self.world.countdownEndTick - self.world.tick
         secs_left = remaining_ticks/FPS
         countdown_value = int(secs_left) + 1
+        
+        # play countdown beep sound (3, 2, 1)
+        if countdown_value in [3, 2, 1]:
+            if self.last_countdown_beep != countdown_value:
+                get_audio_manager().play_countdown(countdown_value)
+                self.last_countdown_beep = countdown_value
 
         #drawing
         countdown_surf = self.countdown_font.render(str(countdown_value), True, "white")
         countdown_rect = countdown_surf.get_frect(center = (WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 80))
 
-        #pulsing effect
+        #pulsing effect TODO
 
         self.screen.blit(countdown_surf,countdown_rect)
 
@@ -159,6 +189,8 @@ class PlayingState(BaseState):
             #launch ball after countdown ends
             if self.world.maybe_resume() and self.ball:
                 self.ball.launch_after_countdown()
+                self.last_countdown_beep = None  # Reset beep tracking
+                get_audio_manager().play_launch()
 
             #update sprites
             self.all_sprites.update(self.FIXED_DT)

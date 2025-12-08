@@ -1,5 +1,6 @@
 from settings import *
 from inputhandler import *
+from audio_manager import get_audio_manager
 
 #abstraction layer of the paddles
 class Paddle(pygame.sprite.Sprite):
@@ -51,9 +52,11 @@ class Paddle(pygame.sprite.Sprite):
                 if self.rect.top < 0:
                     self.rect.top = 0
                     self.vel = -self.vel*2/3
+                    get_audio_manager().play_paddle_hit()
                 elif self.rect.bottom > WINDOW_HEIGHT:
                     self.rect.bottom = WINDOW_HEIGHT
                     self.vel = -self.vel*2/3
+                    get_audio_manager().play_paddle_hit()
                 #friction
                 if self.vel > 0:
                     #self.vel-= self.deceleration*dt
@@ -118,7 +121,7 @@ class Player(Paddle):
         self.input_handler = input_handler
         
         #launch
-        self.max_launch_speed = self.max_speed*1.5
+        self.max_launch_speed = self.max_speed*2.0
      
     def get_direction(self):
         self.direction = self.input_handler.get_direction()
@@ -140,7 +143,7 @@ class Ball(pygame.sprite.Sprite):
          #movement
         self.direction = pygame.Vector2(choice((1,-1)),uniform(0.7,0.8) * choice((-1,1)))
         self.speed = OBJECTS_SPEED['ball']
-        self.is_frozen = False
+        #self.is_frozen = False
 
         #trail
         self.trail = deque(maxlen = 6)
@@ -150,8 +153,6 @@ class Ball(pygame.sprite.Sprite):
         self.trail_surfaces = None
            
     def move(self, dt):
-        #if self.is_frozen:
-           # return
 
         self.rect.x += self.direction.x * self.speed * dt
         self.paddle_collission('horizontal')
@@ -159,16 +160,21 @@ class Ball(pygame.sprite.Sprite):
         self.paddle_collission('vertical')
 
     def wall_collision(self):
-
         #top window collision
         if self.rect.top < 0:
             self.rect.top = 0
             self.direction.y *=-1
+            # pan based on ball horizontal position (-0.7 left to 0.7 right)
+            pan = -0.7 + (self.rect.centerx / WINDOW_WIDTH) * 1.4
+            get_audio_manager().play_wall_hit(pan=pan)
         
         #bottom windows collision
         if self.rect.bottom > WINDOW_HEIGHT:
             self.rect.bottom = WINDOW_HEIGHT
             self.direction.y *= -1
+            # pan based on ball horizontal position (-0.7 left to 0.7 right)
+            pan = -0.7 + (self.rect.centerx / WINDOW_WIDTH) * 1.4
+            get_audio_manager().play_wall_hit(pan=pan)
 
         #getting score
         if self.rect.left  <= 0 or self.rect.right >= WINDOW_WIDTH:
@@ -220,12 +226,17 @@ class Ball(pygame.sprite.Sprite):
         #finding which team is the paddle from
         if paddle.rect.centerx < WINDOW_WIDTH / 2:
             new_direction_x = 1
+            pan = -0.7  # Left paddle: pan to right
         else:
             new_direction_x = -1
+            pan = 0.7   # Right paddle: pan to left
         
         #applying angle
         self.direction.x = new_direction_x * cos(bounce_angle)
         self.direction.y = -sin(bounce_angle)
+        
+        # Play paddle hit sound with velocity and panning
+        get_audio_manager().play_ball_paddle_hit(velocity=self.speed, pan=pan)
 
 
         #paddle effect in the bounce
@@ -237,7 +248,7 @@ class Ball(pygame.sprite.Sprite):
         self.direction = self.direction.normalize()
 
         #increasing speed after bouncing in the paddle
-        self.speed = min(self.speed * 1.05, OBJECTS_SPEED['ball']*2)
+        self.speed = min(self.speed * 1.1, OBJECTS_SPEED['ball']*2)
 
         self._prevent_stuck(paddle)
 
