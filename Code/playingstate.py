@@ -3,6 +3,8 @@ from player import *
 from inputhandler import *
 from world import *
 from gamestate import BaseState
+from network.network_handler import NetworkHandler
+from network.network_input import NetworkInputHandler
 
 class PlayingState(BaseState):
     FIXED_DT = 1/FPS
@@ -17,6 +19,7 @@ class PlayingState(BaseState):
         self.players = {}
         self.ball = None
         self.game_mode = "local"
+        self.network: NetworkHandler | None = None
 
         #fonts
         self.score_font = pygame.font.Font(None, 80)
@@ -28,43 +31,47 @@ class PlayingState(BaseState):
         self.last_substeps = 0
         self.debug_font = pygame.font.Font(None, 24)
 
-    def enter(self, game_mode="local"):
-        #pygame.mouse.set_visible(False)
+    def enter(self, game_mode="local", network=None):
         self.game_mode = game_mode
+        self.network = network
 
-        #initializing world variables
         self.world = World()
         self.accumulator = 0.0
 
-        #initializing sprite groups
         self.all_sprites = pygame.sprite.Group()
         self.paddle_sprites = pygame.sprite.Group()
 
-        #players config
         self.setup_players()
 
         self.ball = Ball(self.all_sprites, self.paddle_sprites, self.update_score)
     
     def setup_players(self):
-        #singleplayer (TODO)
-
-        #local coop (i don't want to make an ai for this game rn)
         if self.game_mode == "local":
-            #player 1
             p1_controller = InputHandler(pygame.K_w, pygame.K_s)
             self.players['player1'] = Player("TEAM_1", 
                                              p1_controller, 
                                              (self.all_sprites, self.paddle_sprites))
             
-            #player 2
             p2_controller = InputHandler(pygame.K_UP, pygame.K_DOWN)
             self.players['player2'] = Player("TEAM_2",
                                             p2_controller,
                                             (self.all_sprites, self.paddle_sprites))
             
-        #multiplayer 1v1 TODO
-        elif self.game_mode == "multiplayer_1v1":
-            pass
+        elif self.game_mode == "multiplayer_1v1" and self.network:
+            local_keys = (pygame.K_w, pygame.K_s)
+            local_controller = InputHandler(*local_keys)
+            remote_controller = NetworkInputHandler(self.network)
+            
+            if self.network.player_id == 1:
+                self.players['player1'] = Player("TEAM_1", local_controller,
+                                                (self.all_sprites, self.paddle_sprites))
+                self.players['player2'] = Player("TEAM_2", remote_controller,
+                                                (self.all_sprites, self.paddle_sprites))
+            else:
+                self.players['player1'] = Player("TEAM_1", remote_controller,
+                                                (self.all_sprites, self.paddle_sprites))
+                self.players['player2'] = Player("TEAM_2", local_controller,
+                                                (self.all_sprites, self.paddle_sprites))
 
     def handle_events(self, events):
         #TODO
@@ -147,27 +154,81 @@ class PlayingState(BaseState):
         step_dt = self.FIXED_DT
         self.accumulator +=dt
 
-        #clamping acc for huge accumulations
         if self.accumulator > max_substeps * step_dt:
             self.accumulator = max_substeps * step_dt
         
-        #verifying fps
+        if self.network:
+            self.network.update()
+            self._send_local_input()
+        
         substeps = 0
         while self.accumulator >= self.FIXED_DT and substeps < max_substeps :
             self.world.tick += 1
 
-            #launch ball after countdown ends
             if self.world.maybe_resume() and self.ball:
                 self.ball.launch_after_countdown()
 
-            #update sprites
             self.all_sprites.update(self.FIXED_DT)
 
-            #consume one step
             self.accumulator -= self.FIXED_DT
             substeps+=1
 
         return substeps
+    
+    def _send_local_input(self):
+        if not self.network:
+            return
+        
+        local_player_key = 'player1' if self.network.player_id == 1 else 'player2'
+        if local_player_key in self.players:
+            player = self.players[local_player_key]
+            if hasattr(player.input_handler, 'get_direction'):
+                direction = player.input_handler.get_direction()
+                self.network.send_input(direction)
+        
+        if self.network.is_host() and self.ball:
+            self.network.send_game_state({
+                'ball_x': self.ball.rect.centerx,
+                'ball_y': self.ball.rect.centery,
+                'ball_dx': self.ball.direction.x,
+                'ball_dy': self.ball.direction.y,
+                'ball_speed': self.ball.speed,
+                'score_t1': self.world.score['TEAM_1'],
+                'score_t2': self.world.score['TEAM_2'],
+                'phase': self.world.phase,
+                'tick': self.world.tick,
+                'countdown_end': self.world.countdownEndTick
+            })
+        
+        if not self.network.is_host():
+            self._apply_game_state()
+    
+    def _apply_game_state(self):
+        if not self.network or not self.ball:
+            return
+        
+        state = self.network.get_game_state()
+        if not state:
+            return
+        
+        if 'ball_x' in state:
+            lerp = 0.4
+            target_x = state['ball_x']
+            target_y = state['ball_y']
+            self.ball.rect.centerx += (target_x - self.ball.rect.centerx) * lerp
+            self.ball.rect.centery += (target_y - self.ball.rect.centery) * lerp
+            self.ball.direction.x = state['ball_dx']
+            self.ball.direction.y = state['ball_dy']
+            self.ball.speed = state['ball_speed']
+        
+        if 'score_t1' in state:
+            self.world.score['TEAM_1'] = state['score_t1']
+            self.world.score['TEAM_2'] = state['score_t2']
+        
+        if 'phase' in state:
+            self.world.phase = state['phase']
+            self.world.tick = state.get('tick', self.world.tick)
+            self.world.countdownEndTick = state.get('countdown_end')
 
         '''
         TO TRY LATER (it freezes the ball and the trail)

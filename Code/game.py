@@ -3,22 +3,18 @@ from player import *
 from gamestate import *
 from playingstate import *
 
-#abstraction layer of th game loop
 class Game:
-    def __init__(self):
+    def __init__(self, game_mode="local", network=None):
         pygame.init()
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         self.clock = pygame.time.Clock()
         pygame.display.set_caption("Ultra Pong")
 
-        #state manager
         self.state_manager = StateManager(self.screen) 
         
-        #registering all states
         self.state_manager.register_state(StateID.PLAYING, PlayingState)
 
-        #starter state
-        self.state_manager.change_state(StateID.PLAYING) #in this case playing the game
+        self.state_manager.change_state(StateID.PLAYING, game_mode=game_mode, network=network)
     
     def run(self):
         while self.state_manager.running:
