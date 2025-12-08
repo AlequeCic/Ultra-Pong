@@ -1,9 +1,14 @@
+import pygame
 from settings import *
-from player import *
+from player import *  
 from gamestate import *
-from playingstate import *
+from playingstate import PlayingState
+from menustate import MainMenuState
+from optionsstate import OptionsState
+from multiplayerstate import MultiplayerModeState, MultiplayerHostJoinState
 
-#abstraction layer of th game loop
+
+# abstraction layer of the game loop
 class Game:
     def __init__(self):
         pygame.init()
@@ -11,14 +16,18 @@ class Game:
         self.clock = pygame.time.Clock()
         pygame.display.set_caption("Ultra Pong")
 
-        #state manager
+        # state manager
         self.state_manager = StateManager(self.screen) 
-        
-        #registering all states
-        self.state_manager.register_state(StateID.PLAYING, PlayingState)
 
-        #starter state
-        self.state_manager.change_state(StateID.PLAYING) #in this case playing the game
+        # registering all states
+        self.state_manager.register_state(StateID.MAIN_MENU, MainMenuState)
+        self.state_manager.register_state(StateID.OPTIONS, OptionsState)
+        self.state_manager.register_state(StateID.PLAYING, PlayingState)
+        self.state_manager.register_state(StateID.MULTI_MODE, MultiplayerModeState)
+        self.state_manager.register_state(StateID.MULTI_HOST_JOIN, MultiplayerHostJoinState)
+
+        # starter state
+        self.state_manager.change_state(StateID.MAIN_MENU)
     
     def run(self):
         while self.state_manager.running:
@@ -31,7 +40,7 @@ class Game:
             for event in events:
                 if event.type == pygame.QUIT:
                     self.state_manager.quit()
-            #update
+
             self.state_manager.handle_events(events)
             self.state_manager.update(dt)
             self.state_manager.draw()
