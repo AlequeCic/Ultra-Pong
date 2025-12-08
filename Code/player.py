@@ -172,7 +172,7 @@ class Ball(pygame.sprite.Sprite):
 
         #getting score
         if self.rect.left  <= 0 or self.rect.right >= WINDOW_WIDTH:
-            self.update_score('TEAM_1' if self.rect.x < WINDOW_WIDTH/2 else 'TEAM_2')
+            self.update_score('TEAM_2' if self.rect.x < WINDOW_WIDTH/2 else 'TEAM_1')
             self.reset()
 
         '''
