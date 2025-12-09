@@ -12,6 +12,7 @@ class NetworkHandler:
         self.game_state: dict = {}
         self.connected = False
         self.waiting_for_opponent = False
+        self.opponent_disconnected = False  # NEW: Track if opponent left during game
     
     def host(self, port: int = 5555) -> bool:
         self.mode = 'host'
@@ -47,6 +48,10 @@ class NetworkHandler:
         
         if self.client:
             self._process_client_messages()
+            # Check if client lost connection to host
+            if not self.client.is_connected and self.connected:
+                self.opponent_disconnected = True
+                self.connected = False
     
     def _process_server_messages(self):
         if not self.server:
@@ -66,6 +71,7 @@ class NetworkHandler:
             
             elif msg_type == 'client_disconnected':
                 self.waiting_for_opponent = True
+                self.opponent_disconnected = True  # Opponent left during game
             
             elif msg_type == 'input':
                 client_id = msg.get('_client_id')
@@ -121,6 +127,10 @@ class NetworkHandler:
     
     def is_ready(self) -> bool:
         return self.connected and not self.waiting_for_opponent
+    
+    def is_opponent_connected(self) -> bool:
+        """Returns True if opponent is still connected during gameplay"""
+        return self.connected and not self.opponent_disconnected
     
     def disconnect(self):
         if self.client:

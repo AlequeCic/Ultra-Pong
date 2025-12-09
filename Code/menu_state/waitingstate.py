@@ -1,4 +1,5 @@
 import os
+import socket
 from gamestate import BaseState, StateID
 from settings import *
 
@@ -42,11 +43,23 @@ class WaitingForPlayersState(BaseState):
         self.dot_timer = 0
         self.dots = ""
         self.wait_time = 0
+        self.local_ip = self._get_local_ip() if is_host else ""
         
         if self.is_host:
             self.message = f"Hosting {mode} match..."
         else:
             self.message = "Connecting to host..."
+    
+    def _get_local_ip(self):
+        """Obtém o IP local da máquina"""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except:
+            return "127.0.0.1"
 
     def handle_events(self, events):
         for event in events:
@@ -120,10 +133,17 @@ class WaitingForPlayersState(BaseState):
         
         # aditional information
         if self.is_host:
-            info_text = f"Mode: {self.mode.upper()} | Port: 5555"
-            info_surf = self.small_font.render(info_text, True, (180, 180, 200))
-            info_rect = info_surf.get_rect(center=(center_x, center_y + 20))
-            self.screen.blit(info_surf, info_rect)
+            # Mostrar IP em destaque
+            ip_text = f"IP: {self.local_ip}"
+            ip_surf = self.text_font.render(ip_text, True, self.highlight_color)
+            ip_rect = ip_surf.get_rect(center=(center_x, center_y + 10))
+            self.screen.blit(ip_surf, ip_rect)
+            
+            # Mostrar porta
+            port_text = f"Port: 5555"
+            port_surf = self.small_font.render(port_text, True, (180, 180, 200))
+            port_rect = port_surf.get_rect(center=(center_x, center_y + 45))
+            self.screen.blit(port_surf, port_rect)
         
         # waiting time
         time_text = f"Waiting: {int(self.wait_time)}s"

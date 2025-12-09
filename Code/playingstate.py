@@ -22,6 +22,11 @@ class PlayingState(BaseState):
         self.game_mode = "local"
         self.network = None
 
+        # Disconnect handling
+        self.opponent_disconnected = False
+        self.disconnect_timer = 0.0
+        self.disconnect_message_duration = 3.0  # Show message for 3 seconds before returning to menu
+
         #fonts
         # --- Controle de pausa / menu in-game ---
         self.paused = False
@@ -63,6 +68,10 @@ class PlayingState(BaseState):
         # reset de pausa ao entrar no jogo
         self.paused = False
         self.pause_index = 0
+        
+        # reset disconnect state
+        self.opponent_disconnected = False
+        self.disconnect_timer = 0.0
 
         # initializing world variables
         self.world = World()
@@ -246,6 +255,10 @@ class PlayingState(BaseState):
         # overlay de pause por cima de tudo
         if self.paused:
             self._draw_pause_menu()
+        
+        # overlay de desconexão
+        if self.opponent_disconnected:
+            self._draw_disconnect_message()
     
     def _draw_pause_menu(self):
         # overlay escuro
@@ -451,6 +464,22 @@ def _ps_update_hr(self, dt):
     if not hasattr(self, 'last_dt'):
         self.last_dt = 0.0
 
+    # Check for opponent disconnect
+    if getattr(self, 'network', None) and not self.opponent_disconnected:
+        if not self.network.is_opponent_connected():
+            self.opponent_disconnected = True
+            self.disconnect_timer = 0.0
+            print("[PlayingState] Opponent disconnected!")
+    
+    # Handle disconnect timer - return to menu after delay
+    if self.opponent_disconnected:
+        self.disconnect_timer += dt
+        if self.disconnect_timer >= self.disconnect_message_duration:
+            if self.network:
+                self.network.disconnect()
+            self.state_manager.change_state(StateID.MAIN_MENU)
+        return  # Don't update game while showing disconnect message
+
     # se estiver pausado, não avança simulação
     if self.paused:
         self.last_dt = 0.0
@@ -470,3 +499,29 @@ def _ps_update_hr(self, dt):
         self.frame_times.pop(0)
 
 PlayingState.update = _ps_update_hr
+
+
+def _draw_disconnect_message(self):
+    """Draw overlay when opponent disconnects"""
+    # overlay escuro
+    overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 200))
+    self.screen.blit(overlay, (0, 0))
+
+    center_x = WINDOW_WIDTH // 2
+    center_y = WINDOW_HEIGHT // 2
+
+    # Mensagem principal
+    msg_text = "OPPONENT DISCONNECTED"
+    msg_surf = self.pause_title_font.render(msg_text, True, (255, 100, 100))
+    msg_rect = msg_surf.get_rect(center=(center_x, center_y - 20))
+    self.screen.blit(msg_surf, msg_rect)
+
+    # Contador regressivo
+    remaining = max(0, self.disconnect_message_duration - self.disconnect_timer)
+    sub_text = f"Returning to menu in {int(remaining) + 1}..."
+    sub_surf = self.pause_small_font.render(sub_text, True, (180, 180, 200))
+    sub_rect = sub_surf.get_rect(center=(center_x, center_y + 30))
+    self.screen.blit(sub_surf, sub_rect)
+
+PlayingState._draw_disconnect_message = _draw_disconnect_message
