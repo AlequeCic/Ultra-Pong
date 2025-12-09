@@ -1,6 +1,5 @@
 from settings import *
 from gamestate import BaseState, StateID
-import pygame
 import os
 import math
 

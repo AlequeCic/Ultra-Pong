@@ -4,8 +4,8 @@ from player import *
 from gamestate import *
 from playingstate import PlayingState
 from menustate import MainMenuState
-from optionsstate import OptionsState
-from multiplayerstate import MultiplayerModeState, MultiplayerHostJoinState
+from menuoptionsstate import OptionsState
+from menumultiplayerstate import MultiplayerModeState, MultiplayerHostJoinState
 
 
 # abstraction layer of the game loop
