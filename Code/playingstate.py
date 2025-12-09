@@ -1,10 +1,11 @@
-import pygame
 import os
 from settings import *
 from player import *
 from inputhandler import *
 from world import *
 from gamestate import BaseState, StateID
+from network.network_handler import NetworkHandler
+from network.network_input import NetworkInputHandler
 
 class PlayingState(BaseState):
     FIXED_DT = 1/FPS
@@ -19,6 +20,7 @@ class PlayingState(BaseState):
         self.players = {}
         self.ball = None
         self.game_mode = "local"
+        self.network = None
 
         #fonts
         # --- Controle de pausa / menu in-game ---
@@ -53,9 +55,10 @@ class PlayingState(BaseState):
         self.pause_text_color = (230, 230, 240)
         self.pause_highlight_color = (55, 255, 139)  
 
-    def enter(self, game_mode="local"):
+    def enter(self, game_mode="local", network = None):
         # pygame.mouse.set_visible(False)
         self.game_mode = game_mode
+        self.network = network
 
         # reset de pausa ao entrar no jogo
         self.paused = False
@@ -72,7 +75,13 @@ class PlayingState(BaseState):
         # players config
         self.setup_players()
 
+        #ball creation
         self.ball = Ball(self.all_sprites, self.paddle_sprites, self.update_score)
+
+    def exit(self):
+        # ending network
+        if self.network:
+            self.network.disconnect()
     
     def setup_players(self):
         # singleplayer (TODO)
@@ -95,9 +104,29 @@ class PlayingState(BaseState):
                 (self.all_sprites, self.paddle_sprites)
             )
             
-        # multiplayer 1v1 TODO
-        elif self.game_mode == "multiplayer_1v1":
-            pass
+        # multiplayer 1v1
+        elif self.game_mode == "multiplayer_1v1" and self.network:
+            # Multiplayer via rede
+            local_keys = (pygame.K_w, pygame.K_s)
+            local_controller = InputHandler(*local_keys)
+            remote_controller = NetworkInputHandler(self.network)
+            
+            if self.network.player_id == 1:
+                # Jogador 1 é local
+                self.players['player1'] = Player("TEAM_1", local_controller,
+                                                (self.all_sprites, self.paddle_sprites))
+                self.players['player2'] = Player("TEAM_2", remote_controller,
+                                                (self.all_sprites, self.paddle_sprites))
+            else:
+                # Jogador 2 é local
+                self.players['player1'] = Player("TEAM_1", remote_controller,
+                                                (self.all_sprites, self.paddle_sprites))
+                self.players['player2'] = Player("TEAM_2", local_controller,
+                                                (self.all_sprites, self.paddle_sprites))
+        
+        elif self.game_mode == "multiplayer_2v2":
+            pass  # Implementação futura
+
 
     def handle_events(self, events):
         # se já está pausado, só processa o menu de pausa
@@ -133,6 +162,9 @@ class PlayingState(BaseState):
             self.paused = False
 
         elif option == "Main Menu":
+            #primeiro desconecta da rede
+            if self.network:
+                self.network.disconnect()
             # retorna ao menu principal
             self.state_manager.change_state(StateID.MAIN_MENU)
 
@@ -184,16 +216,7 @@ class PlayingState(BaseState):
         self.screen.blit(countdown_surf, countdown_rect)
 
     def display_debug(self):
-        last_ms = self.frame_times[-1]
-        avg_ms = sum(self.frame_times) / len(self.frame_times)
-        worst_ms = max(self.frame_times)
-        fps_now = (1.0 / self.last_dt) if self.last_dt > 0 else 0.0
-        fps_avg = 1000.0 / avg_ms if avg_ms > 0 else 0.0
-        text = (f"FPS:{fps_now:.1f} AVG:{fps_avg:.1f}\nWORST:{worst_ms:.2f}ms "
-                f"SUB:{self.last_substeps} ACC:{self.accumulator:.4f} \n"
-                f"TICK:{self.world.tick if self.world else 0}")
-        surf = self.debug_font.render(text, True, (180, 180, 180))
-        self.screen.blit(surf, (8, WINDOW_HEIGHT - 68))
+        pass
 
     def draw(self):
         self.screen.fill("black")
@@ -298,6 +321,11 @@ class PlayingState(BaseState):
         self.screen.blit(footer_surf, footer_rect)
         '''
     def update(self, dt):
+        #update network
+        if self.network:
+            self.network.update()
+            self._send_local_input()
+
         start_ticks = pygame.time.get_ticks()
         self.last_substeps = self.fixed_step(dt)  # returns substeps
         frame_ms = pygame.time.get_ticks() - start_ticks
@@ -344,6 +372,74 @@ class PlayingState(BaseState):
                 if not isinstance(sprite, Ball):  # finds if it isn't the ball
                     sprite.update(self.FIXED_DT)
         '''
+
+    #metodos de rede
+    def _send_local_input(self):
+        if not self.network:
+            return
+        
+        is_host = self.network.is_host()
+        
+        local_player_key = 'player1' if self.network.player_id == 1 else 'player2'
+        if local_player_key in self.players:
+            player = self.players[local_player_key]
+            if hasattr(player.input_handler, 'get_direction'):
+                direction = player.input_handler.get_direction()
+                self.network.send_input(direction)
+        
+        # Host envia estado do jogo
+        if is_host and self.ball:
+            game_state = {
+                'ball_x': self.ball.rect.centerx,
+                'ball_y': self.ball.rect.centery,
+                'ball_dx': self.ball.direction.x,
+                'ball_dy': self.ball.direction.y,
+                'ball_speed': self.ball.speed,
+                'score_t1': self.world.score['TEAM_1'],
+                'score_t2': self.world.score['TEAM_2'],
+                'phase': self.world.phase,
+                'tick': self.world.tick,
+                'countdown_end': self.world.countdownEndTick
+            }
+            self.network.send_game_state(game_state)
+            print(f"[PlayingState] Host sending game_state: ball=({game_state['ball_x']}, {game_state['ball_y']}), score=({game_state['score_t1']}, {game_state['score_t2']})")
+        
+        # Cliente aplica estado recebido
+        if not is_host:
+            self._apply_game_state()
+    def _apply_game_state(self):
+        if not self.network or not self.ball:
+            return
+        
+        state = self.network.get_game_state()
+        if not state:
+            return
+        
+        print(f"[PlayingState] Applying game_state: ball=({state.get('ball_x')}, {state.get('ball_y')}), score=({state.get('score_t1')}, {state.get('score_t2')})")
+        
+        # Interpolação suave da bola
+        if 'ball_x' in state:
+            lerp = 0.4
+            target_x = state['ball_x']
+            target_y = state['ball_y']
+            self.ball.rect.centerx += (target_x - self.ball.rect.centerx) * lerp
+            self.ball.rect.centery += (target_y - self.ball.rect.centery) * lerp
+            self.ball.direction.x = state['ball_dx']
+            self.ball.direction.y = state['ball_dy']
+            self.ball.speed = state['ball_speed']
+        
+        # Atualiza pontuação
+        if 'score_t1' in state:
+            self.world.score['TEAM_1'] = state['score_t1']
+            self.world.score['TEAM_2'] = state['score_t2']
+        
+        # Atualiza estado do jogo
+        if 'phase' in state:
+            self.world.phase = state['phase']
+            self.world.tick = state.get('tick', self.world.tick)
+            self.world.countdownEndTick = state.get('countdown_end')
+
+
 
 # feito por ia, pra debugar o fps (adicionei o Pause aq)
 import time as _time_hr
