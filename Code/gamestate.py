@@ -1,8 +1,12 @@
+# gamestate.py
 from settings import *
 
 class StateID:
-    MAIN_MENU = "main_menu"
-    PLAYING = "playing"
+    MAIN_MENU        = "main_menu"
+    OPTIONS          = "options"
+    PLAYING          = "playing"
+    MULTI_MODE       = "multi_mode"        #  1v1 / 2v2
+    MULTI_HOST_JOIN  = "multi_host_join"   #  host ou join
 
 #abstraction layer of game states (menu, game, etc)
 class BaseState:
@@ -10,7 +14,7 @@ class BaseState:
         self.state_manager = state_manager
         self.screen = state_manager.screen
     
-    def enter(self, **kwards):
+    def enter(self, **kwargs):
         pass
 
     def exit(self):
@@ -38,9 +42,9 @@ class StateManager:
     def change_state(self, new_state_id, **kwargs):
         #changing to a new state
         if self.current_state:
-            self.current_state.exit() #exit the old state
+            self.current_state.exit()
 
-        if new_state_id in self.states: #checks if new states exists
+        if new_state_id in self.states:
             self.current_state = self.states[new_state_id](self)
             self.current_state.enter(**kwargs)
         else:
