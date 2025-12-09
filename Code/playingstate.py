@@ -78,6 +78,7 @@ class PlayingState(BaseState):
         #ball creation
         self.ball = Ball(self.all_sprites, self.paddle_sprites, self.update_score)
 
+
     def exit(self):
         # ending network
         if self.network:
@@ -379,7 +380,7 @@ class PlayingState(BaseState):
             return
         
         is_host = self.network.is_host()
-        
+
         local_player_key = 'player1' if self.network.player_id == 1 else 'player2'
         if local_player_key in self.players:
             player = self.players[local_player_key]
@@ -389,7 +390,7 @@ class PlayingState(BaseState):
         
         # Host envia estado do jogo
         if is_host and self.ball:
-            game_state = {
+            game_state ={
                 'ball_x': self.ball.rect.centerx,
                 'ball_y': self.ball.rect.centery,
                 'ball_dx': self.ball.direction.x,
@@ -401,12 +402,14 @@ class PlayingState(BaseState):
                 'tick': self.world.tick,
                 'countdown_end': self.world.countdownEndTick
             }
+        
             self.network.send_game_state(game_state)
             print(f"[PlayingState] Host sending game_state: ball=({game_state['ball_x']}, {game_state['ball_y']}), score=({game_state['score_t1']}, {game_state['score_t2']})")
         
         # Cliente aplica estado recebido
         if not is_host:
             self._apply_game_state()
+
     def _apply_game_state(self):
         if not self.network or not self.ball:
             return
@@ -417,6 +420,7 @@ class PlayingState(BaseState):
         
         print(f"[PlayingState] Applying game_state: ball=({state.get('ball_x')}, {state.get('ball_y')}), score=({state.get('score_t1')}, {state.get('score_t2')})")
         
+
         # Interpolação suave da bola
         if 'ball_x' in state:
             lerp = 0.4
@@ -451,6 +455,11 @@ def _ps_update_hr(self, dt):
     if self.paused:
         self.last_dt = 0.0
         return
+
+    # REDE
+    if getattr(self, 'network', None):
+        self.network.update()
+        self._send_local_input()
 
     self.last_dt = dt
     start_time = _time_hr.perf_counter()
