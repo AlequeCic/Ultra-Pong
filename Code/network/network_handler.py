@@ -217,34 +217,3 @@ class NetworkHandler:
             self.pause_received = False
             return self.remote_pause_state, self.pause_initiator
         return None, ""
-    
-    def disconnect_clean(self):
-        """Desconexão limpa que espera threads finalizarem"""
-        import time
-        
-        # Sinaliza desconexão
-        self.connected = False
-        self.opponent_disconnected = True
-        
-        # Desconecta cliente
-        if self.client:
-            try:
-                self.client.disconnect()
-            except:
-                pass
-            time.sleep(0.1)  # Pequena pausa
-        
-        # Para servidor
-        if self.server:
-            try:
-                self.server.stop()
-                # Espera um pouco mais para o servidor finalizar
-                time.sleep(0.2)
-            except:
-                pass
-        
-        # Limpa referências
-        self.client = None
-        self.server = None
-        
-        print("[NetworkHandler] Desconexão limpa concluída")

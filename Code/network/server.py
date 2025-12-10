@@ -48,20 +48,24 @@ class TCPServer:
     def stop(self):
         self.running = False
         
-        with self.client_lock:
-            for client_socket in list(self.clients.keys()):
-                self._disconnect_client(client_socket)
-        
+        # Fechar o socket do servidor primeiro para desbloquear accept()
         if self.server_socket:
-            self.server_socket.close()
+            try:
+                self.server_socket.close()
+            except:
+                pass
             self.server_socket = None
         
-        if self._accept_thread and self._accept_thread.is_alive():
-            self._accept_thread.join(timeout=1.0)
-        if self._receive_thread and self._receive_thread.is_alive():
-            self._receive_thread.join(timeout=1.0)
+        # Fechar conexões dos clientes sem esperar
+        with self.client_lock:
+            for client_socket in list(self.clients.keys()):
+                try:
+                    client_socket.close()
+                except:
+                    pass
+            self.clients.clear()
         
-        print("[TCP Server] Servidor encerrado")
+        print("[TCP Server] Servidor encerrado")
     
     def _accept_loop(self):
         while self.running and self.server_socket:
@@ -171,12 +175,6 @@ class TCPServer:
             try:
                 data = json.loads(payload.decode('utf-8'))
                 data['_client_id'] = client_info['id']
-
-                if data.get('type') == 'disconnecting':
-                    print(f"[TCP Server] Cliente {client_info['id']} está se desconectando")
-                    self._handle_disconnect(client_socket)
-                    return
-
                 self.receive_queue.append(data)
             except json.JSONDecodeError as e:
                 print(f"[TCP Server] Erro ao decodificar JSON: {e}")

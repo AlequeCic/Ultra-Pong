@@ -36,6 +36,8 @@ class PauseMenu:
                     self.index = (self.index + 1) % len(self.pause_options)
                 elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                     return self.pause_options[self.index]
+                elif event.key == pygame.K_ESCAPE:
+                    return "Resume"
         return None
     
     def draw(self, center_x, center_y, title_text="PAUSED", show_options=True, show_dots=False):
@@ -109,6 +111,73 @@ class PauseMenu:
     
     def reset(self):
         self.index = 0
+        self.pause_dots = ""
+        self.dot_timer = 0.0
+
+
+class RemotePauseMessage:
+    def __init__(self, screen, title_font, option_font, small_font):
+        self.screen = screen
+        self.title_font = title_font
+        self.option_font = option_font
+        self.small_font = small_font
+        
+        # Configurações de cores
+        self.panel_color = (10, 10, 10)
+        self.panel_border = (200, 200, 200)
+        self.text_color = (230, 230, 240)
+        self.highlight_color = (55, 255, 139)
+        
+        # Animação de dots
+        self.pause_dots = ""
+        self.dot_timer = 0.0
+        self.dot_interval = 0.5
+    
+    def update_dot_animation(self, dt):
+        self.dot_timer += dt
+        if self.dot_timer >= self.dot_interval:
+            self.dot_timer = 0
+            self.pause_dots = "." if len(self.pause_dots) >= 3 else self.pause_dots + "."
+    
+    def draw(self, center_x, center_y):
+        # Overlay escuro
+        overlay = pygame.Surface((self.screen.get_width(), self.screen.get_height()), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        
+        panel_width = 520
+        panel_height = 200
+        
+        panel_rect = pygame.Rect(
+            center_x - panel_width // 2,
+            center_y - panel_height // 2,
+            panel_width,
+            panel_height,
+        )
+        
+        # Painel
+        pygame.draw.rect(self.screen, self.panel_color, panel_rect, border_radius=16)
+        pygame.draw.rect(self.screen, self.panel_border, panel_rect, width=2, border_radius=16)
+        
+        # Título
+        title_text = "GAME PAUSED"
+        title_surf = self.title_font.render(title_text, True, self.text_color)
+        title_rect = title_surf.get_rect(center=(center_x, panel_rect.top + 60))
+        self.screen.blit(title_surf, title_rect)
+        
+        # Mensagem principal
+        msg_text = "Opponent paused the game"
+        msg_surf = self.option_font.render(msg_text, True, self.highlight_color)
+        msg_rect = msg_surf.get_rect(center=(center_x, center_y))
+        self.screen.blit(msg_surf, msg_rect)
+        
+        # Mensagem de espera com dots
+        instr_text = "Waiting for opponent to resume" + self.pause_dots
+        instr_surf = self.small_font.render(instr_text, True, self.text_color)
+        instr_rect = instr_surf.get_rect(center=(center_x, center_y + 40))
+        self.screen.blit(instr_surf, instr_rect)
+    
+    def reset(self):
         self.pause_dots = ""
         self.dot_timer = 0.0
 
