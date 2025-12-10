@@ -755,4 +755,4 @@ A arquitetura de rede do Ultra-Pong fornece uma base robusta para jogabilidade m
 
 ---
 
-*Documentação gerada para Ultra-Pong v1.0*
+*Documentação para Ultra-Pong v1.0*
