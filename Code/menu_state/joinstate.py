@@ -70,7 +70,8 @@ class JoinState(BaseState):
                     char = event.unicode
                     if char.isprintable():
                         if self.active_field == "ip":
-                            if char.isdigit() or char == '.':
+                            # Allow digits, dots, and letters (for "localhost")
+                            if char.isdigit() or char == '.' or char.isalpha():
                                 self.ip_text += char
                         else:
                             if char.isdigit():
