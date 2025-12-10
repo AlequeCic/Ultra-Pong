@@ -89,10 +89,6 @@ class ScoreDisplay:
         """Atualiza o placar e reinicia o countdown"""
         self.world.score[side] += 1
         self.world.start_countdown(3.0, FPS)  # 3 seconds
-        
-        if self.world.ball is not None:
-            # put the ball in the middle and randomize its direction
-            self.world.ball.reset()
     
     def draw(self):
         """Desenha o placar na tela"""

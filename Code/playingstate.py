@@ -106,7 +106,7 @@ class PlayingState(BaseState):
         # ending network
         if self.network:
             try:
-                self.network.disconnect_clean()
+                self.network.disconnect()
             except Exception as e:
                 print(f"[PlayingState] exit disconnect error: {e}")
             finally:
