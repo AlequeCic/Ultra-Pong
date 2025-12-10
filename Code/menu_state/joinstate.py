@@ -1,5 +1,5 @@
 import os
-import re
+import ipaddress
 from gamestate import BaseState, StateID
 from network.network_handler import NetworkHandler
 from settings import *
@@ -83,19 +83,12 @@ class JoinState(BaseState):
         if ip.lower() == "localhost":
             return True
         
-        # Validate IPv4 format
-        ipv4_pattern = r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$'
-        match = re.match(ipv4_pattern, ip)
-        
-        if not match:
+        # Validate IPv4 format using ipaddress module
+        try:
+            ipaddress.IPv4Address(ip)
+            return True
+        except (ValueError, ipaddress.AddressValueError):
             return False
-        
-        # Check each octet is in valid range (0-255)
-        for octet in match.groups():
-            if int(octet) > 255:
-                return False
-        
-        return True
 
     def _try_connect(self):
         # Validate IP address format first
