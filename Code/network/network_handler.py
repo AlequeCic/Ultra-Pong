@@ -103,8 +103,8 @@ class NetworkHandler:
                 # Cliente pediu para pausar/despausar - broadcast para todos
                 paused = msg.get('paused', True)
                 # Determine if this came from the local player or a remote player
-                is_from_self = msg.get('_client_id') == self.player_id
-                initiator = "local" if is_from_self else "remote"
+                is_from_local_player = msg.get('_client_id') == self.player_id
+                initiator = "local" if is_from_local_player else "remote"
                 
                 self.remote_pause_state = paused
                 self.pause_initiator = initiator
