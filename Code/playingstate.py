@@ -84,7 +84,6 @@ class PlayingState(BaseState):
         self.score_display.world = self.world  # Setar world no score_display
         
         # Inicializar managers
-        self.network_sync = NetworkSync(self.network, self.ball, self.world, self.players)
         self.pause_manager = PauseManager(self.network, self.world)
         self.accumulator = 0.0
 
