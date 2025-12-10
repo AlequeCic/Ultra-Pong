@@ -1,10 +1,14 @@
-import pygame
 import os
+import threading
+import time as _time_hr
 from settings import *
 from player import *
 from inputhandler import *
 from world import *
 from gamestate import BaseState, StateID
+from networksync import *
+from menu_state.pause import *
+from menu_state.ui import *
 
 class PlayingState(BaseState):
     FIXED_DT = 1/FPS
@@ -19,50 +23,69 @@ class PlayingState(BaseState):
         self.players = {}
         self.ball = None
         self.game_mode = "local"
+        self.network = None
+        self.network_sync = None  # Será inicializado em enter()
+        self.pause_manager = None  # Será inicializado em enter()
 
-        #fonts
-        # --- Controle de pausa / menu in-game ---
-        self.paused = False
-        self.pause_options = ["Resume", "Main Menu", "Quit"]
-        self.pause_index = 0
+        # Disconnect handling
+        self.opponent_disconnected = False
+        self.disconnect_timer = 0.0
+        self.disconnect_message_duration = 3.0  # Show message for 3 seconds before returning to menu
 
-        # fontes principais
-        self.score_font = pygame.font.Font(None, 80)
-        self.countdown_font = pygame.font.Font(None, 140)
+        # Pause control - managed by PauseManager (single source of truth)
+        # Use self._get_pause_state() to access current pause state
 
         # debug
         self.frame_times = []
         self.max_frame_samples = 240
         self.last_substeps = 0
+        self.last_dt = 0.0
         self.debug_font = pygame.font.Font(None, 24)
 
         # fontes do menu de pausa
         font_path = "8-BIT WONDER.TTF"
         if os.path.exists(font_path):
-            self.pause_title_font = pygame.font.Font(font_path, 56)
-            self.pause_option_font = pygame.font.Font(font_path, 28)
-            self.pause_small_font = pygame.font.Font(font_path, 18)
+            pause_title_font = pygame.font.Font(font_path, 56)
+            pause_option_font = pygame.font.Font(font_path, 28)
+            pause_small_font = pygame.font.Font(font_path, 18)
         else:
-            self.pause_title_font = pygame.font.Font(None, 56)
-            self.pause_option_font = pygame.font.Font(None, 28)
-            self.pause_small_font = pygame.font.Font(None, 18)
+            pause_title_font = pygame.font.Font(None, 56)
+            pause_option_font = pygame.font.Font(None, 28)
+            pause_small_font = pygame.font.Font(None, 18)
 
-        # cores para o menu de pausa 
-        self.pause_panel_color = (10, 10, 10)
-        self.pause_panel_border = (200, 200, 200)
-        self.pause_text_color = (230, 230, 240)
-        self.pause_highlight_color = (55, 255, 139)  
+        # Instanciar as classes de UI
+        self.pause_menu = PauseMenu(self.screen, pause_title_font, pause_option_font, pause_small_font)
+        self.remote_pause_msg = RemotePauseMessage(self.screen, pause_title_font, pause_option_font, pause_small_font)
+        self.disconnect_msg = DisconnectMessage(self.screen, pause_title_font, pause_small_font)
+        self.countdown_display = CountdownDisplay(self.screen, None)  # world será setado em enter()
+        self.score_display = ScoreDisplay(self.screen, None)  # world será setado em enter()
 
-    def enter(self, game_mode="local"):
+    def enter(self, game_mode="local", network = None):
         # pygame.mouse.set_visible(False)
         self.game_mode = game_mode
+        self.network = network
 
-        # reset de pausa ao entrar no jogo
-        self.paused = False
-        self.pause_index = 0
+        # reset pause menu UI
+        self.pause_menu.reset()
+        if self.pause_manager:
+            self.pause_manager.reset()
+        
+        # reset disconnect state
+        self.opponent_disconnected = False
+        self.disconnect_timer = 0.0
+
+        #pause
+        self.pause_notice = ""
+        self.last_pause_state = False
 
         # initializing world variables
         self.world = World()
+        self.countdown_display.world = self.world  # Setar world no countdown_display
+        self.score_display.world = self.world  # Setar world no score_display
+        
+        # Inicializar managers
+        self.network_sync = NetworkSync(self.network, self.ball, self.world, self.players)
+        self.pause_manager = PauseManager(self.network, self.world)
         self.accumulator = 0.0
 
         # initializing sprite groups
@@ -72,7 +95,22 @@ class PlayingState(BaseState):
         # players config
         self.setup_players()
 
+        #ball creation
         self.ball = Ball(self.all_sprites, self.paddle_sprites, self.update_score)
+        
+        # Inicializar NetworkSync
+        self.network_sync = NetworkSync(self.network, self.ball, self.world, self.players)
+
+
+    def exit(self):
+        # ending network
+        if self.network:
+            try:
+                self.network.disconnect_clean()
+            except Exception as e:
+                print(f"[PlayingState] exit disconnect error: {e}")
+            finally:
+                self.network = None
     
     def setup_players(self):
         # singleplayer (TODO)
@@ -95,105 +133,96 @@ class PlayingState(BaseState):
                 (self.all_sprites, self.paddle_sprites)
             )
             
-        # multiplayer 1v1 TODO
-        elif self.game_mode == "multiplayer_1v1":
-            pass
+        # multiplayer 1v1
+        elif self.game_mode == "multiplayer_1v1" and self.network:
+            # Multiplayer via rede
+            local_keys = (pygame.K_w, pygame.K_s)
+            local_controller = InputHandler(*local_keys)
+            remote_controller = NetworkInputHandler(self.network)
+            
+            if self.network.player_id == 1:
+                # Jogador 1 é local
+                self.players['player1'] = Player("TEAM_1", local_controller,
+                                                (self.all_sprites, self.paddle_sprites))
+                self.players['player2'] = Player("TEAM_2", remote_controller,
+                                                (self.all_sprites, self.paddle_sprites))
+            else:
+                # Jogador 2 é local
+                self.players['player1'] = Player("TEAM_1", remote_controller,
+                                                (self.all_sprites, self.paddle_sprites))
+                self.players['player2'] = Player("TEAM_2", local_controller,
+                                                (self.all_sprites, self.paddle_sprites))
+        
+        elif self.game_mode == "multiplayer_2v2":
+            pass  # Implementação futura
+
 
     def handle_events(self, events):
-        # se já está pausado, só processa o menu de pausa
-        if self.paused:
-            self._handle_pause_events(events)
+        if self.opponent_disconnected:
+            return
+        
+        # Get current pause state from manager
+        paused, initiator = self._get_pause_state()
+        
+        # Se está pausado e SOMOS NÓS que pausamos, processa menu
+        if paused and initiator == "local":
+            selected_option = self.pause_menu.handle_events(events)
+            if selected_option:
+                self._activate_pause_option(selected_option)
+            return
+        
+        # Se está pausado pelo oponente, não processa nada (não pode despausar)
+        if paused and initiator == "remote":
             return
 
         # jogo normal: ESC entra em pausa
         for event in events:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                self.paused = True
-                self.pause_index = 0
+                self._toggle_pause_local()
                 return
-        
+            
+    def _toggle_pause_local(self):
+        """Alterna pausa localmente e notifica rede"""
+        if self.pause_manager:
+            self.pause_manager.toggle_pause_local()
 
-    def _handle_pause_events(self, events):
-        for event in events:
-            if event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_UP, pygame.K_w):
-                    self.pause_index = (self.pause_index - 1) % len(self.pause_options)
-                elif event.key in (pygame.K_DOWN, pygame.K_s):
-                    self.pause_index = (self.pause_index + 1) % len(self.pause_options)
-                elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                    self._activate_pause_option()
-                elif event.key == pygame.K_ESCAPE:
-                    # ESC dentro do pause volta direto ao jogo
-                    self.paused = False
-
-    def _activate_pause_option(self):
-        option = self.pause_options[self.pause_index]
-
+    def _activate_pause_option(self, option):
         if option == "Resume":
-            self.paused = False
+            # Apenas o iniciador local pode despausar
+            paused, initiator = self._get_pause_state()
+            if initiator == "local":
+                self._set_pause(False, initiator="local")
+            
+            # Se for pausa remota, não faz nada (o menu não deve aparecer mesmo)
 
         elif option == "Main Menu":
-            # retorna ao menu principal
+            # Primeiro desconecta da rede
+            if self.network:
+                # Desconexão assíncrona para não travar a UI
+                net = self.network
+                self.network = None
+                threading.Thread(target=lambda: net.disconnect(), daemon=True).start()
+
+            # Retorna ao menu principal
             self.state_manager.change_state(StateID.MAIN_MENU)
 
         elif option == "Quit":
             self.state_manager.quit()
 
     def update_score(self, side):
-        self.world.score[side] += 1
-        self.world.start_countdown(3.0, FPS)  # 3 seconds
-
+        if self.score_display:
+            self.score_display.update_score(side)
         if self.ball:
             # put the ball in the middle and randomize its direction
             self.ball.reset()
 
     def display_score(self):
-        # team_1
-        team_1_surf = self.score_font.render(
-            str(self.world.score['TEAM_1']), True, OBJECTS_COLORS['TEAM_1']
-        )
-        team_1_rect = team_1_surf.get_frect(
-            center=(WINDOW_WIDTH/2 - WINDOW_WIDTH/4, 40)
-        )
-        self.screen.blit(team_1_surf, team_1_rect)
+        if self.score_display:
+            self.score_display.draw()
 
-        # team_2
-        team_2_surf = self.score_font.render(
-            str(self.world.score['TEAM_2']), True, OBJECTS_COLORS['TEAM_2']
-        )
-        team_2_rect = team_2_surf.get_frect(
-            center=(WINDOW_WIDTH/2 + WINDOW_WIDTH/4, 40)
-        )
-        self.screen.blit(team_2_surf, team_2_rect)
-
-    def display_countdown(self):
-        if not self.world or self.world.phase != "countdown":
-            return
-
-        remaining_ticks = self.world.countdownEndTick - self.world.tick
-        secs_left = remaining_ticks / FPS
-        countdown_value = int(secs_left) + 1
-
-        # drawing
-        countdown_surf = self.countdown_font.render(str(countdown_value), True, "white")
-        countdown_rect = countdown_surf.get_frect(
-            center=(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 80)
-        )
-
-        # pulsing effect (pode ser implementado depois)
-        self.screen.blit(countdown_surf, countdown_rect)
 
     def display_debug(self):
-        last_ms = self.frame_times[-1]
-        avg_ms = sum(self.frame_times) / len(self.frame_times)
-        worst_ms = max(self.frame_times)
-        fps_now = (1.0 / self.last_dt) if self.last_dt > 0 else 0.0
-        fps_avg = 1000.0 / avg_ms if avg_ms > 0 else 0.0
-        text = (f"FPS:{fps_now:.1f} AVG:{fps_avg:.1f}\nWORST:{worst_ms:.2f}ms "
-                f"SUB:{self.last_substeps} ACC:{self.accumulator:.4f} \n"
-                f"TICK:{self.world.tick if self.world else 0}")
-        surf = self.debug_font.render(text, True, (180, 180, 180))
-        self.screen.blit(surf, (8, WINDOW_HEIGHT - 68))
+        pass
 
     def draw(self):
         self.screen.fill("black")
@@ -213,97 +242,86 @@ class PlayingState(BaseState):
 
         # ui
         self.display_score()
-        self.display_countdown()
+        self.countdown_display.update()
+        self.countdown_display.draw()
 
         # debug
         if self.frame_times:
             self.display_debug()
 
-        # overlay de pause por cima de tudo
-        if self.paused:
-            self._draw_pause_menu()
-    
-    def _draw_pause_menu(self):
-        # overlay escuro
-        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))  # preto com alpha um pouco mais forte
-        self.screen.blit(overlay, (0, 0))
-
-        panel_width = 520
-        panel_height = 280
         center_x = WINDOW_WIDTH // 2
         center_y = WINDOW_HEIGHT // 2
 
-        panel_rect = pygame.Rect(
-            center_x - panel_width // 2,
-            center_y - panel_height // 2,
-            panel_width,
-            panel_height,
-        )
-
-        # painel 
-        pygame.draw.rect(self.screen, self.pause_panel_color, panel_rect, border_radius=16)
-        pygame.draw.rect(self.screen, self.pause_panel_border, panel_rect, width=2, border_radius=16)
-
-        # título
-        title_text = "PAUSED"
-        shadow_surf = self.pause_title_font.render(title_text, True, (0, 0, 0))
-        title_surf = self.pause_title_font.render(title_text, True, self.pause_text_color)
-
-        title_rect = title_surf.get_rect(center=(center_x, panel_rect.top + 60))
-        shadow_rect = shadow_surf.get_rect(center=(center_x + 3, panel_rect.top + 63))
-
-        self.screen.blit(shadow_surf, shadow_rect)
-        self.screen.blit(title_surf, title_rect)
-
+        # Get current pause state from manager (single source of truth)
+        paused, initiator = self._get_pause_state()
         
-        bar_width = 140
-        bar_height = 6
-        bar_rect = pygame.Rect(
-            center_x - bar_width // 2,
-            title_rect.bottom + 8,
-            bar_width,
-            bar_height
-        )
-        pygame.draw.rect(self.screen, (220, 220, 220), bar_rect)
+        # overlay de pause por cima de tudo
+        if paused and initiator == "local":
+            self.pause_menu.draw(center_x, center_y)
 
-        # opções
-        start_y = title_rect.bottom + 35
-        spacing = 40
+        #pause notification
+        elif paused and initiator == "remote":
+            self.remote_pause_msg.draw(center_x, center_y)
+        
+        # overlay de desconexão
+        if self.opponent_disconnected:
+            self.disconnect_msg.draw(center_x, center_y, self.disconnect_timer, self.disconnect_message_duration)
 
-        for i, text in enumerate(self.pause_options):
-            y = start_y + i * spacing
-            selected = (i == self.pause_index)
-            color = self.pause_highlight_color if selected else self.pause_text_color
-
-            option_surf = self.pause_option_font.render(text, True, color)
-            option_rect = option_surf.get_rect(center=(center_x, y))
-            self.screen.blit(option_surf, option_rect)
-
-            if selected:
-                # cursor 
-                cursor_height = option_rect.height - 6
-                cursor_rect = pygame.Rect(
-                    option_rect.left - 26,
-                    option_rect.centery - cursor_height // 2,
-                    10,
-                    cursor_height
-                )
-                pygame.draw.rect(self.screen, self.pause_highlight_color, cursor_rect, border_radius=3)
-        '''
-        # rodapé
-        footer_text = "↑↓: navegar  •  ENTER: selecionar  •  ESC: voltar ao jogo"
-        footer_surf = self.pause_small_font.render(footer_text, True, (190, 190, 210))
-        footer_rect = footer_surf.get_rect(center=(center_x, panel_rect.bottom - 25))
-        self.screen.blit(footer_surf, footer_rect)
-        '''
     def update(self, dt):
-        start_ticks = pygame.time.get_ticks()
-        self.last_substeps = self.fixed_step(dt)  # returns substeps
-        frame_ms = pygame.time.get_ticks() - start_ticks
-        self.frame_times.append(frame_ms)
-        if len(self.frame_times) > self.max_frame_samples:
-            self.frame_times.pop(0)
+        # Check for opponent disconnect
+        if self.network and not self.opponent_disconnected:
+            if not self.network.is_opponent_connected():
+                self.opponent_disconnected = True
+                self.disconnect_timer = 0.0
+                print("[PlayingState] Opponent disconnected!")
+        
+        # Handle disconnect timer - return to menu after delay
+        if self.opponent_disconnected:
+            self.disconnect_timer += dt
+            if self.disconnect_timer >= self.disconnect_message_duration:
+                if self.network:
+                    self.network.disconnect()
+                self.state_manager.change_state(StateID.MAIN_MENU)
+            return  # Don't update game while showing disconnect message
+        
+        # Update dot animation for remote pause message
+        self.update_dot_animation(dt)
+        
+        # Update network
+        if self.network:
+            self.network.update()
+            self._sync_pause_from_network()
+            self._send_local_input()
+        
+        # Se estiver em countdown de pausa, atualizar o tick
+        if self.world and self.world.phase == "pause_countdown":
+            # Atualiza o tick para o countdown funcionar
+            self.world.tick += 1
+            
+            # Verificar se o countdown terminou
+            if self.world.maybe_resume():
+                # Countdown terminou - forçar despause sem rearmar countdown
+                if self.pause_manager:
+                    # Apenas resetar o estado interno sem chamar set_pause
+                    # (que tentaria criar outro countdown)
+                    self.pause_manager.paused = False
+                    self.pause_manager.pause_initiator = None
+            return
+        
+        # Se estiver pausado, não avança simulação
+        paused, _ = self._get_pause_state()
+        if paused:
+            self.last_dt = 0.0
+            return
+        
+        # Avança simulação normalmente
+        self.last_dt = dt
+        #start_time = _time_hr.perf_counter()
+        self.last_substeps = self.fixed_step(dt)
+        #frame_ms = (_time_hr.perf_counter() - start_time) * 1000.0
+        #self.frame_times.append(frame_ms)
+        #if len(self.frame_times) > self.max_frame_samples:
+            #self.frame_times.pop(0)
 
     def fixed_step(self, dt, max_substeps=10):
         """this function accumulates time and runs simulation in the world"""
@@ -332,36 +350,37 @@ class PlayingState(BaseState):
 
         return substeps
 
-        '''
-        TO TRY LATER (it freezes the ball and the trail)
-        # after countdown enter playing phase
-        if self.world.phase == "play":
-            self.all_sprites.update(self.FIXED_DT)
-        
-        else:
-            # only players are updated in countdown
-            for sprite in self.all_sprites:
-                if not isinstance(sprite, Ball):  # finds if it isn't the ball
-                    sprite.update(self.FIXED_DT)
-        '''
+    #metodos de rede
+    def _send_local_input(self):
+        if self.network_sync:
+            self.network_sync.send_local_input()
 
-# feito por ia, pra debugar o fps (adicionei o Pause aq)
-import time as _time_hr
-def _ps_update_hr(self, dt):
-    if not hasattr(self, 'last_dt'):
-        self.last_dt = 0.0
+    def _apply_game_state(self):
+        if self.network_sync:
+            self.network_sync.apply_game_state()
 
-    # se estiver pausado, não avança simulação
-    if self.paused:
-        self.last_dt = 0.0
-        return
+    def _set_pause(self, paused: bool, initiator: str = "local"):
+        """Define estado de pausa e notifica rede se necessário"""
+        if self.pause_manager:
+            self.pause_manager.set_pause(paused, initiator)
+            # State is now retrieved via _get_pause_state()
 
-    self.last_dt = dt
-    start_time = _time_hr.perf_counter()
-    self.last_substeps = self.fixed_step(dt)
-    frame_ms = (_time_hr.perf_counter() - start_time) * 1000.0
-    self.frame_times.append(frame_ms)
-    if len(self.frame_times) > self.max_frame_samples:
-        self.frame_times.pop(0)
+    def _sync_pause_from_network(self):
+        """Sincroniza pausa com a rede"""
+        if self.pause_manager:
+            self.pause_manager.sync_pause_from_network()
+            # State is now retrieved via _get_pause_state()
 
-PlayingState.update = _ps_update_hr
+    def _get_pause_state(self):
+        """Get current pause state from PauseManager (single source of truth)"""
+        if self.pause_manager and hasattr(self.pause_manager, "paused"):
+            return self.pause_manager.paused, getattr(self.pause_manager, "pause_initiator", None)
+        return False, None
+    
+    def update_dot_animation(self, dt):
+        paused, initiator = self._get_pause_state()
+        if paused and initiator == "remote":
+            self.remote_pause_msg.update_dot_animation(dt)
+
+
+

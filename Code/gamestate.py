@@ -7,6 +7,8 @@ class StateID:
     PLAYING          = "playing"
     MULTI_MODE       = "multi_mode"        #  1v1 / 2v2
     MULTI_HOST_JOIN  = "multi_host_join"   #  host ou join
+    WAITING          = "waiting"           #  waiting for player
+    JOIN             = "join"              #  joining a game
 
 #abstraction layer of game states (menu, game, etc)
 class BaseState:

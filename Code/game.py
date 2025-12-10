@@ -4,8 +4,10 @@ from player import *
 from gamestate import *
 from playingstate import PlayingState
 from menustate import MainMenuState
-from menuoptionsstate import OptionsState
-from menumultiplayerstate import MultiplayerModeState, MultiplayerHostJoinState
+from menu_state.optionsstate import OptionsState
+from menu_state.multiplayerstate import MultiplayerModeState, MultiplayerHostJoinState
+from menu_state.waitingstate import WaitingForPlayersState
+from menu_state.joinstate import JoinState
 
 
 # abstraction layer of the game loop
@@ -25,6 +27,8 @@ class Game:
         self.state_manager.register_state(StateID.PLAYING, PlayingState)
         self.state_manager.register_state(StateID.MULTI_MODE, MultiplayerModeState)
         self.state_manager.register_state(StateID.MULTI_HOST_JOIN, MultiplayerHostJoinState)
+        self.state_manager.register_state(StateID.WAITING, WaitingForPlayersState)
+        self.state_manager.register_state(StateID.JOIN, JoinState)
 
         # starter state
         self.state_manager.change_state(StateID.MAIN_MENU)

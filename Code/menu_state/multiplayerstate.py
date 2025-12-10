@@ -2,6 +2,7 @@ from settings import *
 from gamestate import BaseState, StateID
 import os
 import math
+from network.network_handler import NetworkHandler
 
 # TELA 1: escolher modo (1v1 / 2v2)
 class MultiplayerModeState(BaseState):
@@ -34,6 +35,7 @@ class MultiplayerModeState(BaseState):
         self.panel_border = (200, 200, 200)
         self.text_color = (230, 230, 240)
         self.highlight_color = (55, 255, 139)
+        self.disabled_color = (100, 100, 100)  #cor para itens desabilitados (2v2)
 
         self.time = 0
         self.selected_mode = None  # "1v1" ou "2v2"
@@ -42,6 +44,10 @@ class MultiplayerModeState(BaseState):
         self.current_index = 0
         self.time = 0
         self.selected_mode = None
+
+        #para o 2v2
+        self.message = ""
+        self.message_timer = 0
 
     def handle_events(self, events):
         for event in events:
@@ -64,14 +70,22 @@ class MultiplayerModeState(BaseState):
             self.state_manager.change_state(StateID.MULTI_HOST_JOIN, mode=self.selected_mode)
 
         elif option == "2 vs 2":
-            self.selected_mode = "2v2"
-            self.state_manager.change_state(StateID.MULTI_HOST_JOIN, mode=self.selected_mode)
+            # Mostrar mensagem de que está em desenvolvimento
+            self.message = "2v2 mode coming soon!"
+            self.message_timer = 2.0  # Mostrar por 2 segundos
 
         elif option == "Back":
             self.state_manager.change_state(StateID.MAIN_MENU)
 
     def update(self, dt):
         self.time += dt
+
+        #atualizando a mensagem
+        # Atualizar timer da mensagem
+        if self.message_timer > 0:
+            self.message_timer -= dt
+            if self.message_timer <= 0:
+                self.message = ""
 
     def _draw_vertical_gradient(self):
         for y in range(WINDOW_HEIGHT):
@@ -170,6 +184,12 @@ class MultiplayerModeState(BaseState):
             is_selected = (i == self.current_index)
             color = self.highlight_color if is_selected else self.text_color
 
+            # Verificar se é a opção 2v2 (índice 1)
+            if i == 1:  # 2 vs 2 está desabilitado
+                color = self.disabled_color
+            else:
+                color = self.highlight_color if is_selected else self.text_color
+
             option_surf = self.option_font.render(text, True, color)
             option_rect = option_surf.get_rect(center=(self.center_x, y))
             self.screen.blit(option_surf, option_rect)
@@ -184,6 +204,12 @@ class MultiplayerModeState(BaseState):
                     cursor_h
                 )
                 pygame.draw.rect(self.screen, self.highlight_color, cursor_rect, border_radius=3)
+
+        # Mensagem temporária
+        if self.message:
+            msg_surf = self.small_font.render(self.message, True, (255, 200, 100))
+            msg_rect = msg_surf.get_rect(center=(self.center_x, panel_rect.bottom - 50))
+            self.screen.blit(msg_surf, msg_rect)
 
         footer_text = "ENTER: selecionar  •  ESC: voltar"
         footer_surf = self.small_font.render(footer_text, True, (180, 180, 200))
@@ -250,13 +276,23 @@ class MultiplayerHostJoinState(BaseState):
         option = self.options[self.current_index]
 
         if option == "Host match":
-            print(f"[MULTI] Host {self.mode} - ESPERANDO IMPLEMENTAÇÃO")
+            # Criar servidor e ir para tela de espera
+            network = NetworkHandler()
+            if network.host(5555):  # Porta padrão
+                self.state_manager.change_state(StateID.WAITING, 
+                                              network=network, 
+                                              mode=self.mode,
+                                              is_host=True)
+            else:
+                print("Failed to host server")
 
         elif option == "Join match":
-            print(f"[MULTI] Join {self.mode} - ESPERANDO IMPLEMENTAÇÃO")
+            # Ir para tela de inserir IP
+            self.state_manager.change_state(StateID.JOIN)
 
         elif option == "Back":
             self.state_manager.change_state(StateID.MULTI_MODE)
+
 
     def update(self, dt):
         self.time += dt
