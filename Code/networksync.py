@@ -148,6 +148,11 @@ class PauseManager:
                     # Recebeu despausa do oponente - iniciar countdown
                     self.set_pause(False, initiator="remote")
     
+    def complete_countdown(self):
+        """Completa o countdown de pausa sem rearmar outro countdown"""
+        self.paused = False
+        self.pause_initiator = None
+    
     def reset(self):
         """Reseta o estado de pausa"""
         self.paused = False
