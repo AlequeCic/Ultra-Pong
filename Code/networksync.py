@@ -19,16 +19,18 @@ class NetworkSync:
         
         is_host = self.network.is_host()
         
-        # Enviar input do jogador local
+        # Enviar input do jogador local + posição Y do paddle
         local_player_key = 'player1' if self.network.player_id == 1 else 'player2'
         if local_player_key in self.players:
             player = self.players[local_player_key]
             if hasattr(player.input_handler, 'get_direction'):
                 direction = player.input_handler.get_direction()
-                self.network.send_input(direction)
+                paddle_y = player.rect.centery  # Captura posição Y atual
+                self.network.send_input(direction, paddle_y=paddle_y)
         
-        # Host envia estado do jogo
+        # Host aplica posição do oponente recebida via input
         if is_host:
+            self._apply_opponent_position_from_input()
             self.send_game_state(is_host)
         
         # Cliente aplica estado recebido
@@ -40,6 +42,14 @@ class NetworkSync:
         if not is_host or not self.network or not self.ball or not self.world:
             return
         
+        # Captura posições dos paddles
+        p1_y = None
+        p2_y = None
+        if 'player1' in self.players:
+            p1_y = self.players['player1'].rect.centery
+        if 'player2' in self.players:
+            p2_y = self.players['player2'].rect.centery
+        
         game_state = {
             'ball_x': self.ball.rect.centerx,
             'ball_y': self.ball.rect.centery,
@@ -50,7 +60,9 @@ class NetworkSync:
             'score_t2': self.world.score['TEAM_2'],
             'phase': self.world.phase,
             'tick': self.world.tick,
-            'countdown_end': self.world.countdownEndTick
+            'countdown_end': self.world.countdownEndTick,
+            'p1_y': p1_y,  # Posição Y do player 1
+            'p2_y': p2_y   # Posição Y do player 2
         }
     
         self.network.send_game_state(game_state)
@@ -85,6 +97,33 @@ class NetworkSync:
             self.world.phase = state['phase']
             self.world.tick = state.get('tick', self.world.tick)
             self.world.countdownEndTick = state.get('countdown_end')
+        
+        # Aplica posição do oponente (player1 para o cliente que é player2)
+        # O cliente é player2, então o oponente é player1
+        if 'p1_y' in state and state['p1_y'] is not None:
+            if 'player1' in self.players:
+                opponent = self.players['player1']
+                target_y = state['p1_y']
+                # Interpolação suave para evitar teleporte
+                lerp_paddle = 0.5
+                opponent.rect.centery += (target_y - opponent.rect.centery) * lerp_paddle
+    
+    def _apply_opponent_position_from_input(self):
+        """Host aplica posição do oponente recebida via mensagem de input"""
+        if not self.network:
+            return
+        
+        opponent_pos = self.network.get_opponent_position()
+        if opponent_pos is not None:
+            # Host é player1, então o oponente é player2
+            if 'player2' in self.players:
+                opponent = self.players['player2']
+                target_y = opponent_pos
+                # Interpolação suave para evitar teleporte
+                lerp_paddle = 0.5
+                opponent.rect.centery += (target_y - opponent.rect.centery) * lerp_paddle
+            # Limpa a posição para não reaplicar
+            self.network.clear_opponent_position()
 
 
 class PauseManager:

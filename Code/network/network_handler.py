@@ -9,6 +9,7 @@ class NetworkHandler:
         self.server: TCPServer | None = None
         self.player_id: int = 0
         self.opponent_direction: float = 0.0
+        self.opponent_position: float | None = None  # Posição Y do paddle do oponente
         self.game_state: dict = {}
         self.connected = False
         self.waiting_for_opponent = False
@@ -119,6 +120,9 @@ class NetworkHandler:
                 client_id = msg.get('_client_id')
                 if client_id != self.player_id:
                     self.opponent_direction = msg.get('direction', 0)
+                    # Armazena posição Y do paddle do oponente para sincronização
+                    if 'paddle_y' in msg:
+                        self.opponent_position = msg.get('paddle_y')
     
     def _process_client_messages(self):
         if not self.client:
@@ -142,6 +146,9 @@ class NetworkHandler:
             
             elif msg_type == 'opponent_input':
                 self.opponent_direction = msg.get('direction', 0)
+                # Armazena posição Y do paddle do oponente para sincronização
+                if 'paddle_y' in msg:
+                    self.opponent_position = msg.get('paddle_y')
 
             elif msg_type == 'pause_state':
                 # Recebeu estado de pausa do host
@@ -149,15 +156,23 @@ class NetworkHandler:
                 self.pause_initiator = msg.get('initiator', 'host')
                 self.pause_received = True
     
-    def send_input(self, direction: float):
+    def send_input(self, direction: float, paddle_y: float | None = None):
+        """Envia input do jogador local com direção e posição Y do paddle."""
+        msg = {'type': 'input', 'direction': direction}
+        if paddle_y is not None:
+            msg['paddle_y'] = paddle_y
+        
         if self.client:
-            self.client.send({'type': 'input', 'direction': direction})
+            self.client.send(msg)
         
         if self.server:
-            self.server.send_to_all_except(self.player_id, {
+            opponent_msg = {
                 'type': 'opponent_input',
                 'direction': direction
-            })
+            }
+            if paddle_y is not None:
+                opponent_msg['paddle_y'] = paddle_y
+            self.server.send_to_all_except(self.player_id, opponent_msg)
     
     def send_game_state(self, state: dict):
         if self.server:
@@ -166,6 +181,14 @@ class NetworkHandler:
     
     def get_opponent_direction(self) -> float:
         return self.opponent_direction
+    
+    def get_opponent_position(self) -> float | None:
+        """Retorna a última posição Y conhecida do paddle do oponente."""
+        return self.opponent_position
+    
+    def clear_opponent_position(self):
+        """Limpa a posição do oponente após ser consumida (para evitar reaplicar)."""
+        self.opponent_position = None
     
     def get_game_state(self) -> dict:
         return self.game_state
