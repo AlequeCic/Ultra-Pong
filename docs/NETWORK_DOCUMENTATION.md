@@ -139,6 +139,8 @@ classDiagram
         +send_to_all(data)
         +send_to_all_except(id, data)
         +get_messages() list
+        +get_client_count() int
+        +get_client_ids() list
     }
     
     class TCPClient {
@@ -156,13 +158,25 @@ classDiagram
         +mode: str
         +player_id: int
         +opponent_direction: float
+        +opponent_position: float | None
         +game_state: dict
+        +connected: bool
+        +waiting_for_opponent: bool
+        +opponent_disconnected: bool
         +host(port) bool
         +join(host, port) bool
         +update()
-        +send_input(direction)
+        +send_input(direction, paddle_y) 
         +send_game_state(state)
+        +get_opponent_direction() float
+        +get_opponent_position() float | None
+        +clear_opponent_position()
         +is_ready() bool
+        +is_host() bool
+        +is_opponent_connected() bool
+        +disconnect()
+        +send_pause_request(paused)
+        +get_pause_state() tuple
     }
     
     class NetworkInputHandler {
@@ -171,9 +185,20 @@ classDiagram
         +set_direction(direction)
     }
     
+    class NetworkSync {
+        +network: NetworkHandler
+        +ball: Ball
+        +world: World
+        +players: dict
+        +send_local_input()
+        +send_game_state(is_host)
+        +apply_game_state()
+    }
+    
     NetworkHandler --> TCPServer : gerencia
     NetworkHandler --> TCPClient : gerencia
     NetworkInputHandler --> NetworkHandler : utiliza
+    NetworkSync --> NetworkHandler : utiliza
 ```
 
 ---
