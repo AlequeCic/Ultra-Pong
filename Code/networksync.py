@@ -102,8 +102,8 @@ class PauseManager:
         self.paused = new_pause_state
         self.pause_initiator = "local" if new_pause_state else None
         
-        # Notificar rede
-        if self.network and new_pause_state:
+        # Notificar rede SEMPRE (tanto pause quanto unpause)
+        if self.network:
             self.network.send_pause_request(new_pause_state)
     
     def set_pause(self, paused: bool, initiator: str = "local"):
@@ -119,10 +119,12 @@ class PauseManager:
         # se estávamos em countdown de gol, apenas retoma o countdown existente.
         if not paused and self.world:
             from settings import FPS
+            # Evita rearmar countdown se já está em pause_countdown ou já despausou
             if self.world.phase == "play":
                 self.world.start_pause_countdown(3.0, FPS)
             elif self.world.phase == "countdown":
                 self.world.start_countdown(3.0, FPS)
+            # Se já está em pause_countdown, não faz nada (evita loop)
         
         # Notificar rede se for ação local
         if initiator == "local" and self.network:

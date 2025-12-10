@@ -32,10 +32,8 @@ class PlayingState(BaseState):
         self.disconnect_timer = 0.0
         self.disconnect_message_duration = 3.0  # Show message for 3 seconds before returning to menu
 
-        # Pause control
-        self.paused = False
-        self.last_pause_state = False #detect changes
-        self.pause_initiator = None #detect who made the pause
+        # Pause control - managed by PauseManager (single source of truth)
+        # Use self._get_pause_state() to access current pause state
 
         # debug
         self.frame_times = []
@@ -67,8 +65,7 @@ class PlayingState(BaseState):
         self.game_mode = game_mode
         self.network = network
 
-        # reset de pausa ao entrar no jogo
-        self.paused = False
+        # reset pause menu UI
         self.pause_menu.reset()
         if self.pause_manager:
             self.pause_manager.reset()
@@ -164,15 +161,18 @@ class PlayingState(BaseState):
         if self.opponent_disconnected:
             return
         
+        # Get current pause state from manager
+        paused, initiator = self._get_pause_state()
+        
         # Se está pausado e SOMOS NÓS que pausamos, processa menu
-        if self.paused and self.pause_initiator == "local":
+        if paused and initiator == "local":
             selected_option = self.pause_menu.handle_events(events)
             if selected_option:
                 self._activate_pause_option(selected_option)
             return
         
         # Se está pausado pelo oponente, não processa nada (não pode despausar)
-        if self.paused and self.pause_initiator == "remote":
+        if paused and initiator == "remote":
             return
 
         # jogo normal: ESC entra em pausa
@@ -185,14 +185,12 @@ class PlayingState(BaseState):
         """Alterna pausa localmente e notifica rede"""
         if self.pause_manager:
             self.pause_manager.toggle_pause_local()
-            # Sincronizar estado com playingstate
-            self.paused = self.pause_manager.paused
-            self.pause_initiator = self.pause_manager.pause_initiator
 
     def _activate_pause_option(self, option):
         if option == "Resume":
             # Apenas o iniciador local pode despausar
-            if self.pause_initiator == "local":
+            paused, initiator = self._get_pause_state()
+            if initiator == "local":
                 self._set_pause(False, initiator="local")
             
             # Se for pausa remota, não faz nada (o menu não deve aparecer mesmo)
@@ -254,12 +252,15 @@ class PlayingState(BaseState):
         center_x = WINDOW_WIDTH // 2
         center_y = WINDOW_HEIGHT // 2
 
+        # Get current pause state from manager (single source of truth)
+        paused, initiator = self._get_pause_state()
+        
         # overlay de pause por cima de tudo
-        if self.paused and self.pause_initiator == "local":
+        if paused and initiator == "local":
             self.pause_menu.draw(center_x, center_y)
 
         #pause notification
-        elif self.paused and self.pause_initiator == "remote":
+        elif paused and initiator == "remote":
             self.remote_pause_msg.draw(center_x, center_y)
         
         # overlay de desconexão
@@ -299,16 +300,17 @@ class PlayingState(BaseState):
             
             # Verificar se o countdown terminou
             if self.world.maybe_resume():
-                # Countdown terminou, despausar completamente
-                self.paused = False
-                self.pause_initiator = None
-                # Notificar rede se somos o host/local que iniciou o despause
-                if self.pause_initiator == "local" and self.network:
-                    self.network.send_pause_request(False)
+                # Countdown terminou - forçar despause sem rearmar countdown
+                if self.pause_manager:
+                    # Apenas resetar o estado interno sem chamar set_pause
+                    # (que tentaria criar outro countdown)
+                    self.pause_manager.paused = False
+                    self.pause_manager.pause_initiator = None
             return
         
         # Se estiver pausado, não avança simulação
-        if self.paused:
+        paused, _ = self._get_pause_state()
+        if paused:
             self.last_dt = 0.0
             return
         
@@ -361,20 +363,23 @@ class PlayingState(BaseState):
         """Define estado de pausa e notifica rede se necessário"""
         if self.pause_manager:
             self.pause_manager.set_pause(paused, initiator)
-            # Sincronizar estado com playingstate
-            self.paused = self.pause_manager.paused
-            self.pause_initiator = self.pause_manager.pause_initiator
+            # State is now retrieved via _get_pause_state()
 
     def _sync_pause_from_network(self):
         """Sincroniza pausa com a rede"""
         if self.pause_manager:
             self.pause_manager.sync_pause_from_network()
-            # Sincronizar estado com playingstate
-            self.paused = self.pause_manager.paused
-            self.pause_initiator = self.pause_manager.pause_initiator
+            # State is now retrieved via _get_pause_state()
 
+    def _get_pause_state(self):
+        """Get current pause state from PauseManager (single source of truth)"""
+        if self.pause_manager and hasattr(self.pause_manager, "paused"):
+            return self.pause_manager.paused, getattr(self.pause_manager, "pause_initiator", None)
+        return False, None
+    
     def update_dot_animation(self, dt):
-        if self.paused and self.pause_initiator == "remote":
+        paused, initiator = self._get_pause_state()
+        if paused and initiator == "remote":
             self.remote_pause_msg.update_dot_animation(dt)
 
 
