@@ -284,9 +284,6 @@ class PlayingState(BaseState):
                 self.state_manager.change_state(StateID.MAIN_MENU)
             return  # Don't update game while showing disconnect message
         
-        # Update dot animation for remote pause message
-        self.update_dot_animation(dt)
-        
         # Update network
         if self.network:
             self.network.update()
@@ -309,8 +306,11 @@ class PlayingState(BaseState):
             return
         
         # Se estiver pausado, não avança simulação
-        paused, _ = self._get_pause_state()
+        paused, initiator = self._get_pause_state()
         if paused:
+            # Update dot animation only when displaying remote pause message
+            if initiator == "remote":
+                self.update_dot_animation(dt)
             self.last_dt = 0.0
             return
         
