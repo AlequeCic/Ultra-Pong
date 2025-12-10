@@ -13,6 +13,10 @@ class NetworkHandler:
         self.connected = False
         self.waiting_for_opponent = False
         self.opponent_disconnected = False  # NEW: Track if opponent left during game
+        # pause sync
+        self.remote_pause_state = False
+        self.pause_initiator = ""  # "host" or "client"
+        self.pause_received = False  # Flag to know when we received a pause state
     
     def host(self, port: int = 5555) -> bool:
         self.mode = 'host'
@@ -72,6 +76,22 @@ class NetworkHandler:
             elif msg_type == 'client_disconnected':
                 self.waiting_for_opponent = True
                 self.opponent_disconnected = True  # Opponent left during game
+
+            elif msg_type == 'pause_request':
+                # Cliente pediu para pausar/despausar - broadcast para todos
+                paused = msg.get('paused', True)
+                initiator = "client" if msg.get('_client_id') != self.player_id else "local"
+                
+                self.remote_pause_state = paused
+                self.pause_initiator = initiator
+                self.pause_received = True
+
+                # Envia para todos exceto quem pediu
+                self.server.send_to_all_except(msg.get('_client_id'), {
+                    'type': 'pause_state',
+                    'paused': paused,
+                    'initiator': initiator
+                })
             
             elif msg_type == 'input':
                 client_id = msg.get('_client_id')
@@ -100,6 +120,12 @@ class NetworkHandler:
             
             elif msg_type == 'opponent_input':
                 self.opponent_direction = msg.get('direction', 0)
+
+            elif msg_type == 'pause_state':
+                # Recebeu estado de pausa do host
+                self.remote_pause_state = msg.get('paused', False)
+                self.pause_initiator = msg.get('initiator', 'host')
+                self.pause_received = True
     
     def send_input(self, direction: float):
         if self.client:
@@ -131,7 +157,7 @@ class NetworkHandler:
     def is_opponent_connected(self) -> bool:
         """Returns True if opponent is still connected during gameplay"""
         return self.connected and not self.opponent_disconnected
-    
+
     def disconnect(self):
         if self.client:
             self.client.disconnect()
@@ -142,3 +168,30 @@ class NetworkHandler:
             self.server = None
         
         self.connected = False
+
+    def send_pause_request(self, paused: bool):
+        """Envia requisição de pausa"""
+        if self.client:
+            # Cliente envia requisição para o host
+            self.client.send({
+                'type': 'pause_request', 
+                'paused': paused
+            })
+        elif self.server and self.is_host():
+            # Host pausa diretamente e notifica todos
+            self.remote_pause_state = paused
+            self.pause_initiator = "host"
+            self.pause_received = True
+            # Envia para todos os clientes
+            self.server.send_to_all({
+                'type': 'pause_state',
+                'paused': paused,
+                'initiator': 'host'
+            })
+
+    def get_pause_state(self):
+        """Retorna o estado de pausa recebido e reseta a flag"""
+        if self.pause_received:
+            self.pause_received = False
+            return self.remote_pause_state, self.pause_initiator
+        return None, ""

@@ -27,11 +27,19 @@ class PlayingState(BaseState):
         self.disconnect_timer = 0.0
         self.disconnect_message_duration = 3.0  # Show message for 3 seconds before returning to menu
 
+        self.pause_notice_timer = 0.0
+
         #fonts
         # --- Controle de pausa / menu in-game ---
         self.paused = False
         self.pause_options = ["Resume", "Main Menu", "Quit"]
         self.pause_index = 0
+        self.last_pause_state = False # detect changes
+        self.pause_initiator = None
+        self.pause_notice = ""
+        self.pause_dots = ""
+        self.dot_timer = 0.0
+        self.dot_interval = 0.5  # segundos
 
         # fontes principais
         self.score_font = pygame.font.Font(None, 80)
@@ -72,6 +80,10 @@ class PlayingState(BaseState):
         # reset disconnect state
         self.opponent_disconnected = False
         self.disconnect_timer = 0.0
+
+        #pause
+        self.pause_notice = ""
+        self.last_pause_state = False
 
         # initializing world variables
         self.world = World()
@@ -139,18 +151,35 @@ class PlayingState(BaseState):
 
 
     def handle_events(self, events):
-        # se já está pausado, só processa o menu de pausa
-        if self.paused:
+
+        if self.opponent_disconnected:
+            return
+        
+        # Se está pausado e SOMOS NÓS que pausamos, processa menu
+        if self.paused and self.pause_initiator == "local":
             self._handle_pause_events(events)
+            return
+        
+        # Se está pausado pelo oponente, não processa nada (não pode despausar)
+        if self.paused and self.pause_initiator == "remote":
             return
 
         # jogo normal: ESC entra em pausa
         for event in events:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                self.paused = True
+                self._toggle_pause_local()
                 self.pause_index = 0
                 return
+            
+    def _toggle_pause_local(self):
+        """Alterna pausa localmente e notifica rede"""
+        new_pause_state = not self.paused
+        self.paused = new_pause_state
+        self.pause_initiator = "local" if new_pause_state else None
         
+        # Notificar rede
+        if self.network and new_pause_state:
+            self.network.send_pause_request(new_pause_state)
 
     def _handle_pause_events(self, events):
         for event in events:
@@ -162,20 +191,25 @@ class PlayingState(BaseState):
                 elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                     self._activate_pause_option()
                 elif event.key == pygame.K_ESCAPE:
-                    # ESC dentro do pause volta direto ao jogo
-                    self.paused = False
+                    # ESC dentro do pause volta direto ao jogo (apenas se for nosso pause)
+                    if self.pause_initiator == "local":
+                        self._set_pause(False, initiator="local")
 
     def _activate_pause_option(self):
         option = self.pause_options[self.pause_index]
 
         if option == "Resume":
-            self.paused = False
+            # Apenas o iniciador local pode despausar
+            if self.pause_initiator == "local":
+                self._set_pause(False, initiator="local")
+            
+            # Se for pausa remota, não faz nada (o menu não deve aparecer mesmo)
 
         elif option == "Main Menu":
-            #primeiro desconecta da rede
+            # Primeiro desconecta da rede
             if self.network:
                 self.network.disconnect()
-            # retorna ao menu principal
+            # Retorna ao menu principal
             self.state_manager.change_state(StateID.MAIN_MENU)
 
         elif option == "Quit":
@@ -209,9 +243,36 @@ class PlayingState(BaseState):
         self.screen.blit(team_2_surf, team_2_rect)
 
     def display_countdown(self):
-        if not self.world or self.world.phase != "countdown":
+        if not self.world:
             return
 
+        # countdown de despausa
+        if self.world.phase == "pause_countdown":
+            if self.world.pause_countdownEndTick is not None:
+                remaining_ticks = self.world.pause_countdownEndTick - self.world.tick
+                secs_left = remaining_ticks / FPS
+                countdown_value = int(secs_left) + 1
+                
+                # Desenhar
+                countdown_surf = self.countdown_font.render(str(countdown_value), True, "yellow")
+                countdown_rect = countdown_surf.get_frect(
+                    center=(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 80)
+                )
+                self.screen.blit(countdown_surf, countdown_rect)
+                
+                # Mensagem
+                resume_text = "Game resuming in"
+                resume_surf = self.pause_small_font.render(resume_text, True, (200, 200, 100))
+                resume_rect = resume_surf.get_frect(
+                    center=(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 + 20)
+                )
+                self.screen.blit(resume_surf, resume_rect)
+            return #ele nao mostra o outro contador se esse estiver aparecendo
+
+        if not self.world.phase == "countdown":
+            return
+
+        #countdown normal
         remaining_ticks = self.world.countdownEndTick - self.world.tick
         secs_left = remaining_ticks / FPS
         countdown_value = int(secs_left) + 1
@@ -253,12 +314,36 @@ class PlayingState(BaseState):
             self.display_debug()
 
         # overlay de pause por cima de tudo
-        if self.paused:
+        if self.paused and self.pause_initiator == "local":
             self._draw_pause_menu()
+
+        #pause notification
+        elif self.paused and self.pause_initiator == "remote":
+            self._draw_remote_pause_message()
         
         # overlay de desconexão
         if self.opponent_disconnected:
             self._draw_disconnect_message()
+
+    def _draw_disconnect_message(self):
+        """Draw overlay when opponent disconnects"""
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 200))
+        self.screen.blit(overlay, (0, 0))
+
+        center_x = WINDOW_WIDTH // 2
+        center_y = WINDOW_HEIGHT // 2
+
+        msg_text = "OPPONENT DISCONNECTED"
+        msg_surf = self.pause_title_font.render(msg_text, True, (255, 100, 100))
+        msg_rect = msg_surf.get_rect(center=(center_x, center_y - 20))
+        self.screen.blit(msg_surf, msg_rect)
+
+        remaining = max(0, self.disconnect_message_duration - self.disconnect_timer)
+        sub_text = f"Returning to menu in {int(remaining) + 1}..."
+        sub_surf = self.pause_small_font.render(sub_text, True, (180, 180, 200))
+        sub_rect = sub_surf.get_rect(center=(center_x, center_y + 30))
+        self.screen.blit(sub_surf, sub_rect)
     
     def _draw_pause_menu(self):
         # overlay escuro
@@ -327,17 +412,55 @@ class PlayingState(BaseState):
                     cursor_height
                 )
                 pygame.draw.rect(self.screen, self.pause_highlight_color, cursor_rect, border_radius=3)
-        '''
-        # rodapé
-        footer_text = "↑↓: navegar  •  ENTER: selecionar  •  ESC: voltar ao jogo"
-        footer_surf = self.pause_small_font.render(footer_text, True, (190, 190, 210))
-        footer_rect = footer_surf.get_rect(center=(center_x, panel_rect.bottom - 25))
-        self.screen.blit(footer_surf, footer_rect)
-        '''
+
+    def _draw_remote_pause_message(self):
+        """Desenha mensagem quando o oponente pausou"""
+        # overlay escuro
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+
+        center_x = WINDOW_WIDTH // 2
+        center_y = WINDOW_HEIGHT // 2
+
+        # Painel similar ao do menu de pausa
+        panel_width = 520
+        panel_height = 200
+        panel_rect = pygame.Rect(
+            center_x - panel_width // 2,
+            center_y - panel_height // 2,
+            panel_width,
+            panel_height,
+        )
+
+        # Painel 
+        pygame.draw.rect(self.screen, self.pause_panel_color, panel_rect, border_radius=16)
+        pygame.draw.rect(self.screen, self.pause_panel_border, panel_rect, width=2, border_radius=16)
+
+        # Título
+        title_text = "GAME PAUSED"
+        title_surf = self.pause_title_font.render(title_text, True, self.pause_text_color)
+        title_rect = title_surf.get_rect(center=(center_x, panel_rect.top + 60))
+        self.screen.blit(title_surf, title_rect)
+
+        # Mensagem maior com cor destacada
+        msg_text = "Opponent paused the game"
+        msg_surf = self.pause_option_font.render(msg_text, True, self.pause_highlight_color)
+        msg_rect = msg_surf.get_rect(center=(center_x, center_y))
+        self.screen.blit(msg_surf, msg_rect)
+
+        # Mensagem de instrução
+        instr_text = "Waiting for opponent to resume" + self.pause_dots
+        instr_surf = self.pause_small_font.render(instr_text, True, self.pause_text_color)
+        instr_rect = instr_surf.get_rect(center=(center_x, center_y + 40))
+        self.screen.blit(instr_surf, instr_rect)
+
+
     def update(self, dt):
         #update network
         if self.network:
             self.network.update()
+            self._sync_pause_from_network()
             self._send_local_input()
 
         start_ticks = pygame.time.get_ticks()
@@ -417,7 +540,7 @@ class PlayingState(BaseState):
             }
         
             self.network.send_game_state(game_state)
-            print(f"[PlayingState] Host sending game_state: ball=({game_state['ball_x']}, {game_state['ball_y']}), score=({game_state['score_t1']}, {game_state['score_t2']})")
+            #print(f"[PlayingState] Host sending game_state: ball=({game_state['ball_x']}, {game_state['ball_y']}), score=({game_state['score_t1']}, {game_state['score_t2']})")
         
         # Cliente aplica estado recebido
         if not is_host:
@@ -431,7 +554,7 @@ class PlayingState(BaseState):
         if not state:
             return
         
-        print(f"[PlayingState] Applying game_state: ball=({state.get('ball_x')}, {state.get('ball_y')}), score=({state.get('score_t1')}, {state.get('score_t2')})")
+        #print(f"[PlayingState] Applying game_state: ball=({state.get('ball_x')}, {state.get('ball_y')}), score=({state.get('score_t1')}, {state.get('score_t2')})")
         
 
         # Interpolação suave da bola
@@ -456,6 +579,53 @@ class PlayingState(BaseState):
             self.world.tick = state.get('tick', self.world.tick)
             self.world.countdownEndTick = state.get('countdown_end')
 
+    def _set_pause(self, paused: bool, initiator: str = "local"):
+        """Define estado de pausa e notifica rede se necessário"""
+        # Se o estado não mudou, não faz nada
+        if self.paused == paused and self.pause_initiator == initiator:
+            return
+        
+        self.paused = paused
+        self.pause_initiator = initiator if paused else None
+        self.pause_dots = ""
+        self.dot_timer = 0.0
+        
+        # Se estamos despausando: só cria pause_countdown se estávamos jogando;
+        # se estávamos em countdown de gol, apenas retoma o countdown existente.
+        if not paused and self.world:
+            if self.world.phase == "play":
+                self.world.start_pause_countdown(3.0, FPS)
+            elif self.world.phase == "countdown":
+                self.world.start_countdown(3.0, FPS)
+        
+        # Notificar rede se for ação local
+        if initiator == "local" and self.network:
+            self.network.send_pause_request(paused)
+
+    def _sync_pause_from_network(self):
+        """Sincroniza pausa com a rede"""
+        if not self.network:
+            return
+        
+        # Verificar se recebemos estado de pausa da rede
+        remote_pause_state, initiator = self.network.get_pause_state()
+        
+        if remote_pause_state is not None:
+            # Apenas sincronizar se for pausa remota E não formos nós que pausamos
+            if self.pause_initiator != "local":
+                if remote_pause_state:
+                    # Recebeu pausa do oponente
+                    self._set_pause(True, initiator="remote")
+                else:
+                    # Recebeu despausa do oponente - iniciar countdown
+                    self._set_pause(False, initiator="remote")
+
+    def update_dot_animation(self, dt):
+        if self.paused:
+            self.dot_timer += dt
+        if self.dot_timer >= self.dot_interval:
+            self.dot_timer = 0
+            self.pause_dots = "." if len(self.pause_dots) >= 3 else self.pause_dots + "."
 
 
 # feito por ia, pra debugar o fps (adicionei o Pause aq)
@@ -480,17 +650,36 @@ def _ps_update_hr(self, dt):
             self.state_manager.change_state(StateID.MAIN_MENU)
         return  # Don't update game while showing disconnect message
 
+    self.update_dot_animation(dt)
+
+    # Atualiza rede primeiro
+    if getattr(self, 'network', None):
+        self.network.update()
+        self._sync_pause_from_network()  
+        self._send_local_input()
+
+    # Se estiver em countdown de pausa, atualizar o tick
+    if self.world and self.world.phase == "pause_countdown":
+        # Atualiza o tick para o countdown funcionar
+        self.world.tick += 1
+        
+        # Verificar se o countdown terminou
+        if self.world.maybe_resume():
+            # Countdown terminou, despausar completamente
+            self.paused = False
+            self.pause_initiator = None
+            self.pause_dots = ""
+            # Notificar rede se somos o host/local que iniciou o despause
+            if self.pause_initiator == "local" and self.network:
+                self.network.send_pause_request(False)
+        return
+
     # se estiver pausado, não avança simulação
     if self.paused:
         self.last_dt = 0.0
         return
 
-    # REDE
-    if getattr(self, 'network', None):
-        self.network.update()
-        self._send_local_input()
-
-    self.last_dt = dt
+    self.last_dt = dt 
     start_time = _time_hr.perf_counter()
     self.last_substeps = self.fixed_step(dt)
     frame_ms = (_time_hr.perf_counter() - start_time) * 1000.0
@@ -500,28 +689,3 @@ def _ps_update_hr(self, dt):
 
 PlayingState.update = _ps_update_hr
 
-
-def _draw_disconnect_message(self):
-    """Draw overlay when opponent disconnects"""
-    # overlay escuro
-    overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 200))
-    self.screen.blit(overlay, (0, 0))
-
-    center_x = WINDOW_WIDTH // 2
-    center_y = WINDOW_HEIGHT // 2
-
-    # Mensagem principal
-    msg_text = "OPPONENT DISCONNECTED"
-    msg_surf = self.pause_title_font.render(msg_text, True, (255, 100, 100))
-    msg_rect = msg_surf.get_rect(center=(center_x, center_y - 20))
-    self.screen.blit(msg_surf, msg_rect)
-
-    # Contador regressivo
-    remaining = max(0, self.disconnect_message_duration - self.disconnect_timer)
-    sub_text = f"Returning to menu in {int(remaining) + 1}..."
-    sub_surf = self.pause_small_font.render(sub_text, True, (180, 180, 200))
-    sub_rect = sub_surf.get_rect(center=(center_x, center_y + 30))
-    self.screen.blit(sub_surf, sub_rect)
-
-PlayingState._draw_disconnect_message = _draw_disconnect_message
