@@ -19,12 +19,23 @@ class NetworkHandler:
         self.pause_received = False  # Flag to know when we received a pause state
     
     def host(self, port: int = 5555) -> bool:
+        # Ensure previous sockets/threads are closed before re-hosting
+        self.disconnect()
+
         self.mode = 'host'
+        self.connected = False
+        self.waiting_for_opponent = False
+        self.opponent_disconnected = False
+        self.game_state = {}
+        self.opponent_direction = 0.0
+        self.remote_pause_state = False
+        self.pause_initiator = ""
+        self.pause_received = False
         self.server = TCPServer('0.0.0.0', port, max_clients=2)
-        
+
         if not self.server.start():
             return False
-        
+
         self.client = TCPClient('localhost', port)
         if not self.client.connect():
             self.server.stop()
@@ -36,7 +47,18 @@ class NetworkHandler:
         return True
     
     def join(self, host: str, port: int = 5555) -> bool:
+        # Ensure previous sockets/threads are closed before joining again
+        self.disconnect()
+
         self.mode = 'client'
+        self.connected = False
+        self.waiting_for_opponent = False
+        self.opponent_disconnected = False
+        self.game_state = {}
+        self.opponent_direction = 0.0
+        self.remote_pause_state = False
+        self.pause_initiator = ""
+        self.pause_received = False
         self.client = TCPClient(host, port)
         
         if not self.client.connect():
@@ -195,3 +217,34 @@ class NetworkHandler:
             self.pause_received = False
             return self.remote_pause_state, self.pause_initiator
         return None, ""
+    
+    def disconnect_clean(self):
+        """Desconexão limpa que espera threads finalizarem"""
+        import time
+        
+        # Sinaliza desconexão
+        self.connected = False
+        self.opponent_disconnected = True
+        
+        # Desconecta cliente
+        if self.client:
+            try:
+                self.client.disconnect()
+            except:
+                pass
+            time.sleep(0.1)  # Pequena pausa
+        
+        # Para servidor
+        if self.server:
+            try:
+                self.server.stop()
+                # Espera um pouco mais para o servidor finalizar
+                time.sleep(0.2)
+            except:
+                pass
+        
+        # Limpa referências
+        self.client = None
+        self.server = None
+        
+        print("[NetworkHandler] Desconexão limpa concluída")

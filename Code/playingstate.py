@@ -1,4 +1,5 @@
 import os
+import threading
 from settings import *
 from player import *
 from inputhandler import *
@@ -6,6 +7,19 @@ from world import *
 from gamestate import BaseState, StateID
 from network.network_handler import NetworkHandler
 from network.network_input import NetworkInputHandler
+from menu_state.pause import *
+
+
+def _safe_disconnect(net):
+    try:
+        if net is None:
+            return
+        if hasattr(net, "disconnect_clean"):
+            net.disconnect_clean()
+        else:
+            net.disconnect()
+    except Exception as e:
+        print(f"[PlayingState] async disconnect error: {e}")
 
 class PlayingState(BaseState):
     FIXED_DT = 1/FPS
@@ -103,7 +117,12 @@ class PlayingState(BaseState):
     def exit(self):
         # ending network
         if self.network:
-            self.network.disconnect()
+            try:
+                self.network.disconnect_clean()
+            except Exception as e:
+                print(f"[PlayingState] exit disconnect error: {e}")
+            finally:
+                self.network = None
     
     def setup_players(self):
         # singleplayer (TODO)
@@ -208,7 +227,11 @@ class PlayingState(BaseState):
         elif option == "Main Menu":
             # Primeiro desconecta da rede
             if self.network:
-                self.network.disconnect()
+                # Desconexão assíncrona para não travar a UI
+                net = self.network
+                self.network = None
+                threading.Thread(target=lambda: _safe_disconnect(net), daemon=True).start()
+
             # Retorna ao menu principal
             self.state_manager.change_state(StateID.MAIN_MENU)
 

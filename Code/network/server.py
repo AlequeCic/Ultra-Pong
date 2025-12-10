@@ -171,6 +171,12 @@ class TCPServer:
             try:
                 data = json.loads(payload.decode('utf-8'))
                 data['_client_id'] = client_info['id']
+
+                if data.get('type') == 'disconnecting':
+                    print(f"[TCP Server] Cliente {client_info['id']} está se desconectando")
+                    self._handle_disconnect(client_socket)
+                    return
+
                 self.receive_queue.append(data)
             except json.JSONDecodeError as e:
                 print(f"[TCP Server] Erro ao decodificar JSON: {e}")
