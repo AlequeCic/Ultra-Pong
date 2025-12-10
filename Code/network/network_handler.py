@@ -15,7 +15,7 @@ class NetworkHandler:
         self.opponent_disconnected = False  # NEW: Track if opponent left during game
         # pause sync
         self.remote_pause_state = False
-        self.pause_initiator = ""  # "host" or "client"
+        self.pause_initiator = ""  # "local" or "remote"
         self.pause_received = False  # Flag to know when we received a pause state
     
     def host(self, port: int = 5555) -> bool:
@@ -102,7 +102,9 @@ class NetworkHandler:
             elif msg_type == 'pause_request':
                 # Cliente pediu para pausar/despausar - broadcast para todos
                 paused = msg.get('paused', True)
-                initiator = "client" if msg.get('_client_id') != self.player_id else "local"
+                # Determine if this came from the local player or a remote player
+                is_from_self = msg.get('_client_id') == self.player_id
+                initiator = "local" if is_from_self else "remote"
                 
                 self.remote_pause_state = paused
                 self.pause_initiator = initiator
@@ -112,7 +114,7 @@ class NetworkHandler:
                 self.server.send_to_all_except(msg.get('_client_id'), {
                     'type': 'pause_state',
                     'paused': paused,
-                    'initiator': initiator
+                    'initiator': 'remote'  # From the receiving client's perspective, it's remote
                 })
             
             elif msg_type == 'input':
@@ -146,7 +148,7 @@ class NetworkHandler:
             elif msg_type == 'pause_state':
                 # Recebeu estado de pausa do host
                 self.remote_pause_state = msg.get('paused', False)
-                self.pause_initiator = msg.get('initiator', 'host')
+                self.pause_initiator = msg.get('initiator', 'remote')  # Default to remote since it came from network
                 self.pause_received = True
     
     def send_input(self, direction: float):
@@ -202,13 +204,13 @@ class NetworkHandler:
         elif self.server and self.is_host():
             # Host pausa diretamente e notifica todos
             self.remote_pause_state = paused
-            self.pause_initiator = "host"
+            self.pause_initiator = "local"  # Host initiated locally
             self.pause_received = True
             # Envia para todos os clientes
             self.server.send_to_all({
                 'type': 'pause_state',
                 'paused': paused,
-                'initiator': 'host'
+                'initiator': 'remote'  # From clients' perspective, it's remote
             })
 
     def get_pause_state(self):
