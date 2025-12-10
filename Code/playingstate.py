@@ -378,9 +378,8 @@ class PlayingState(BaseState):
         return False, None
     
     def update_dot_animation(self, dt):
-        paused, initiator = self._get_pause_state()
-        if paused and initiator == "remote":
-            self.remote_pause_msg.update_dot_animation(dt)
+        # Called only when in remote pause state
+        self.remote_pause_msg.update_dot_animation(dt)
 
 
 
