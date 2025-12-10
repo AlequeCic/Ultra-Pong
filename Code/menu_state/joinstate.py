@@ -1,8 +1,6 @@
 import os
 from gamestate import BaseState, StateID
 from network.network_handler import NetworkHandler
-from settings import *
-
 class JoinState(BaseState):
     def __init__(self, state_manager):
         super().__init__(state_manager)
