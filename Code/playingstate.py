@@ -259,6 +259,26 @@ class PlayingState(BaseState):
         # overlay de desconexão
         if self.opponent_disconnected:
             self._draw_disconnect_message()
+
+    def _draw_disconnect_message(self):
+        """Draw overlay when opponent disconnects"""
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 200))
+        self.screen.blit(overlay, (0, 0))
+
+        center_x = WINDOW_WIDTH // 2
+        center_y = WINDOW_HEIGHT // 2
+
+        msg_text = "OPPONENT DISCONNECTED"
+        msg_surf = self.pause_title_font.render(msg_text, True, (255, 100, 100))
+        msg_rect = msg_surf.get_rect(center=(center_x, center_y - 20))
+        self.screen.blit(msg_surf, msg_rect)
+
+        remaining = max(0, self.disconnect_message_duration - self.disconnect_timer)
+        sub_text = f"Returning to menu in {int(remaining) + 1}..."
+        sub_surf = self.pause_small_font.render(sub_text, True, (180, 180, 200))
+        sub_rect = sub_surf.get_rect(center=(center_x, center_y + 30))
+        self.screen.blit(sub_surf, sub_rect)
     
     def _draw_pause_menu(self):
         # overlay escuro
@@ -500,28 +520,3 @@ def _ps_update_hr(self, dt):
 
 PlayingState.update = _ps_update_hr
 
-
-def _draw_disconnect_message(self):
-    """Draw overlay when opponent disconnects"""
-    # overlay escuro
-    overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 200))
-    self.screen.blit(overlay, (0, 0))
-
-    center_x = WINDOW_WIDTH // 2
-    center_y = WINDOW_HEIGHT // 2
-
-    # Mensagem principal
-    msg_text = "OPPONENT DISCONNECTED"
-    msg_surf = self.pause_title_font.render(msg_text, True, (255, 100, 100))
-    msg_rect = msg_surf.get_rect(center=(center_x, center_y - 20))
-    self.screen.blit(msg_surf, msg_rect)
-
-    # Contador regressivo
-    remaining = max(0, self.disconnect_message_duration - self.disconnect_timer)
-    sub_text = f"Returning to menu in {int(remaining) + 1}..."
-    sub_surf = self.pause_small_font.render(sub_text, True, (180, 180, 200))
-    sub_rect = sub_surf.get_rect(center=(center_x, center_y + 30))
-    self.screen.blit(sub_surf, sub_rect)
-
-PlayingState._draw_disconnect_message = _draw_disconnect_message
