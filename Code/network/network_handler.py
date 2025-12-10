@@ -103,6 +103,8 @@ class NetworkHandler:
                 # Cliente pediu para pausar/despausar - broadcast para todos
                 paused = msg.get('paused', True)
                 client_id = msg.get('_client_id')
+                # Note: Host's client connection has client_id == self.player_id (both are 1)
+                # so we can distinguish between host pausing (local) vs client pausing (remote)
                 initiator_for_host = "local" if client_id == self.player_id else "remote"
                 
                 self.remote_pause_state = paused
