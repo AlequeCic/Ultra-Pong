@@ -87,7 +87,7 @@ class JoinState(BaseState):
         try:
             ipaddress.IPv4Address(ip)
             return True
-        except (ValueError, ipaddress.AddressValueError):
+        except ValueError:
             return False
 
     def _try_connect(self):
