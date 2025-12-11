@@ -246,15 +246,19 @@ Esse conjunto de mensagens é suficiente para sincronizar o jogo entre host e cl
 
 Siga os passos abaixo para executar o Ultra Pong pela primeira vez:
 
-### 1. Acesse a pasta do projeto
+### 🔹 1. Clonar o repositório 
+```
+git clone https://github.com/AlequeCic/Ultra-Pong
+```
+### 🔹 2. Acesse a pasta do projeto
 ```
 cd Ultra-Pong
 ```
-### 2. Crie um ambiente virtual
+### 🔹 3. Crie um ambiente virtual
 ```
 python -m venv venv
 ```
-### 🔹 3. Ative o ambiente virtual
+### 🔹 4. Ative o ambiente virtual
 
 #### ✔ Windows
 ```
@@ -264,15 +268,15 @@ venv\Scripts\activate
 ```
 source venv/bin/activate
 ```
-### 🔹 4. Instale as dependências necessárias
+### 🔹 5. Instale as dependências necessárias
 ```
 pip install pygame-ce
 ```
-### 🔹 5. Acesse a pasta onde está o código do jogo
+### 🔹 6. Acesse a pasta onde está o código do jogo
 ```
 cd code
 ```
-### 🔹 6. Execute o jogo
+### 🔹 7. Execute o jogo
 #### Windows
 ```
 python main.py
