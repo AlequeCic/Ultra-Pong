@@ -1,4 +1,5 @@
 import os
+import ipaddress
 from gamestate import BaseState, StateID
 from network.network_handler import NetworkHandler
 class JoinState(BaseState):
@@ -67,13 +68,30 @@ class JoinState(BaseState):
                     char = event.unicode
                     if char.isprintable():
                         if self.active_field == "ip":
-                            if char.isdigit() or char == '.':
+                            # Allow digits, dots, and letters (for "localhost")
+                            if char.isdigit() or char == '.' or char.isalpha():
                                 self.ip_text += char
                         else:
                             if char.isdigit():
                                 self.port_text += char
 
+    def _validate_ip(self, ip: str) -> bool:
+        """Validate IP address format (IPv4 or localhost)"""
+        # Allow localhost
+        if ip.lower() == "localhost":
+            return True
+        
+        # Validate IPv4 format using ipaddress module
+        try:
+            ipaddress.IPv4Address(ip)
+            return True
+        except ValueError:
+            return False
+
     def _try_connect(self):
+        # Validate IP address format first
+        if not self._validate_ip(self.ip_text):
+            self.error_message = "Invalid IP address format"
         # Check if port is empty
         if not self.port_text:
             self.error_message = "Port cannot be empty"
