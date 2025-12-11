@@ -107,11 +107,12 @@ class NetworkHandler:
                 initiator = "local" if is_from_local_player else "remote"
                 
                 self.remote_pause_state = paused
-                self.pause_initiator = initiator
+                self.pause_initiator = initiator_for_host
                 self.pause_received = True
 
                 # Envia para todos exceto quem pediu
-                self.server.send_to_all_except(msg.get('_client_id'), {
+                # Para outros clientes, sempre é "remote" (veio de um oponente)
+                self.server.send_to_all_except(client_id, {
                     'type': 'pause_state',
                     'paused': paused,
                     'initiator': 'remote'  # From the receiving client's perspective, it's remote

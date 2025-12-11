@@ -1,8 +1,6 @@
 import os
 from gamestate import BaseState, StateID
 from network.network_handler import NetworkHandler
-from settings import *
-
 class JoinState(BaseState):
     def __init__(self, state_manager):
         super().__init__(state_manager)
@@ -76,6 +74,11 @@ class JoinState(BaseState):
                                 self.port_text += char
 
     def _try_connect(self):
+        # Check if port is empty
+        if not self.port_text:
+            self.error_message = "Port cannot be empty"
+            return
+        
         try:
             port = int(self.port_text)
             network = NetworkHandler()
