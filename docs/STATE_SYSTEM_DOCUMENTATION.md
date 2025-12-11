@@ -1,9 +1,5 @@
 # 🎮 Documentação do Sistema de Estados do Ultra-Pong
 
-> **Versão:** 1.0  
-> **Última Atualização:** Dezembro 2024  
-> **Autores:** Equipe de Desenvolvimento Ultra-Pong
-
 ---
 
 ## 📋 Índice
