@@ -1,6 +1,6 @@
 # 🌐 Documentação da Arquitetura de Rede do Ultra-Pong
 
-> **Versão:** 1.0  
+> **Versão:** 1.1  
 > **Última Atualização:** Dezembro 2024  
 > **Autores:** Equipe de Desenvolvimento Ultra-Pong
 
@@ -139,6 +139,8 @@ classDiagram
         +send_to_all(data)
         +send_to_all_except(id, data)
         +get_messages() list
+        +get_client_count() int
+        +get_client_ids() list
     }
     
     class TCPClient {
@@ -156,13 +158,25 @@ classDiagram
         +mode: str
         +player_id: int
         +opponent_direction: float
+        +opponent_position: float | None
         +game_state: dict
+        +connected: bool
+        +waiting_for_opponent: bool
+        +opponent_disconnected: bool
         +host(port) bool
         +join(host, port) bool
         +update()
-        +send_input(direction)
+        +send_input(direction, paddle_y) 
         +send_game_state(state)
+        +get_opponent_direction() float
+        +get_opponent_position() float | None
+        +clear_opponent_position()
         +is_ready() bool
+        +is_host() bool
+        +is_opponent_connected() bool
+        +disconnect()
+        +send_pause_request(paused)
+        +get_pause_state() tuple
     }
     
     class NetworkInputHandler {
@@ -171,9 +185,20 @@ classDiagram
         +set_direction(direction)
     }
     
+    class NetworkSync {
+        +network: NetworkHandler
+        +ball: Ball
+        +world: World
+        +players: dict
+        +send_local_input()
+        +send_game_state(is_host)
+        +apply_game_state()
+    }
+    
     NetworkHandler --> TCPServer : gerencia
     NetworkHandler --> TCPClient : gerencia
     NetworkInputHandler --> NetworkHandler : utiliza
+    NetworkSync --> NetworkHandler : utiliza
 ```
 
 ---
@@ -247,18 +272,22 @@ data = json.loads(payload.decode('utf-8'))       # Deserializa JSON
 ```json
 {
     "type": "input",
-    "direction": 1.0
+    "direction": 1.0,
+    "paddle_y": 360.5
 }
 ```
-> **Nota:** Valores de direção: `-1.0` (cima), `0.0` (parado), `1.0` (baixo)
+> **Nota:** Valores de direção: `-1.0` (cima), `0.0` (parado), `1.0` (baixo)  
+> **Novo em v1.1:** O campo `paddle_y` envia a posição Y atual do paddle para sincronização precisa.
 
 #### Input do Oponente
 ```json
 {
     "type": "opponent_input",
-    "direction": -1.0
+    "direction": -1.0,
+    "paddle_y": 280.0
 }
 ```
+> **Novo em v1.1:** Inclui `paddle_y` para o host corrigir a posição do oponente antes de calcular colisões.
 
 #### Estado do Jogo (Autoritativo)
 ```json
@@ -273,9 +302,12 @@ data = json.loads(payload.decode('utf-8'))       # Deserializa JSON
     "score_t2": 2,
     "phase": "play",
     "tick": 1542,
-    "countdown_end": null
+    "countdown_end": null,
+    "p1_y": 300.0,
+    "p2_y": 420.5
 }
 ```
+> **Novo em v1.1:** Campos `p1_y` e `p2_y` enviam as posições dos paddles para o cliente corrigir visualização.
 
 ---
 
@@ -414,9 +446,11 @@ NetworkHandler(mode: str = 'client')
 | `host(port)` | `bool` | Inicia servidor e conecta como jogador 1 |
 | `join(host, port)` | `bool` | Entra em jogo existente como cliente |
 | `update()` | `None` | Processa todas as mensagens pendentes de rede |
-| `send_input(direction)` | `None` | Envia movimento da raquete do jogador local |
+| `send_input(direction, paddle_y)` | `None` | Envia movimento e posição da raquete do jogador local |
 | `send_game_state(state)` | `None` | Apenas host: transmite estado do jogo |
 | `get_opponent_direction()` | `float` | Retorna último input do oponente |
+| `get_opponent_position()` | `float \| None` | **Novo v1.1:** Retorna última posição Y do oponente |
+| `clear_opponent_position()` | `None` | **Novo v1.1:** Limpa posição após consumir |
 | `is_ready()` | `bool` | True se o jogo pode começar |
 | `disconnect()` | `None` | Fecha todas as conexões |
 
@@ -499,18 +533,19 @@ sequenceDiagram
     
     loop A cada Frame (~16ms)
         Note over P1: Captura input local
-        P1->>Server: input (direction)
-        Server-->>P2: opponent_input (direction)
+        P1->>Server: input (direction, paddle_y)
+        Server-->>P2: opponent_input (direction, paddle_y)
         
         Note over P2: Captura input local  
-        P2->>Server: input (direction)
+        P2->>Server: input (direction, paddle_y)
         Server-->>P1: input via _process_server_messages
+        Note over P1: Corrige posição do P2 com paddle_y
         
         Note over P1: Atualiza física (autoritativo)
-        P1->>Server: game_state (bola, pontuação, etc.)
+        P1->>Server: game_state (bola, p1_y, p2_y, pontuação)
         Server-->>P2: game_state
         
-        Note over P2: Interpola estado recebido
+        Note over P2: Interpola bola e corrige posição do P1
     end
 ```
 
@@ -594,18 +629,23 @@ def update(self, dt):
 
 ```python
 def _send_local_input(self):
-    # Obtém direção do jogador local
+    # Obtém direção e posição do jogador local
     local_key = 'player1' if self.network.player_id == 1 else 'player2'
-    direction = self.players[local_key].input_handler.get_direction()
-    self.network.send_input(direction)
+    player = self.players[local_key]
+    direction = player.input_handler.get_direction()
+    paddle_y = player.rect.centery  # Nova sincronização de posição
+    self.network.send_input(direction, paddle_y=paddle_y)
     
-    # Host envia estado do jogo autoritativo
+    # Host aplica posição do oponente e envia estado
     if self.network.is_host():
+        self._apply_opponent_position_from_input()
         game_state = {
             'ball_x': self.ball.rect.centerx,
             'ball_y': self.ball.rect.centery,
             'ball_dx': self.ball.direction.x,
             'ball_dy': self.ball.direction.y,
+            'p1_y': self.players['player1'].rect.centery,  # Novo
+            'p2_y': self.players['player2'].rect.centery,  # Novo
             # ... mais estado
         }
         self.network.send_game_state(game_state)
@@ -629,6 +669,12 @@ def _apply_game_state(self):
     # Sincronização de pontuação e fase
     self.world.score['TEAM_1'] = state['score_t1']
     self.world.score['TEAM_2'] = state['score_t2']
+    
+    # Novo v1.1: Corrige posição do oponente (player1) com interpolação
+    if 'p1_y' in state and state['p1_y'] is not None:
+        opponent = self.players['player1']
+        lerp_paddle = 0.5
+        opponent.rect.centery += (state['p1_y'] - opponent.rect.centery) * lerp_paddle
 ```
 
 ---
@@ -681,7 +727,8 @@ while len(buffer) >= 4:  # Mínimo: cabeçalho de 4 bytes
 | **Polling com select()** | Usa `select.select()` com timeout | Multiplexação eficiente |
 | **Threads daemon** | `daemon=True` nas threads | Encerramento limpo |
 | **Deque para filas** | `collections.deque` | O(1) para append/popleft |
-| **Interpolação linear** | 40% lerp no cliente | Suaviza atualizações de posição |
+| **Interpolação linear** | 40% lerp na bola, 50% nos paddles | Suaviza atualizações de posição |
+| **Sincronização de posição** | `paddle_y` enviado com input | **Novo v1.1:** Reduz dessincronização |
 
 ### Tratamento de Erros
 
@@ -749,10 +796,26 @@ A arquitetura de rede do Ultra-Pong fornece uma base robusta para jogabilidade m
 > **Pontos-Chave:**
 > - **Modelo autoritativo do host**: O host executa a simulação física e transmite o estado
 > - **Clientes apenas com input**: Clientes enviam apenas a direção da raquete, minimizando banda
+> - **Sincronização de posição (v1.1)**: Posição Y dos paddles enviada bidirecionalmente para evitar dessincronização
 > - **JSON com prefixo de tamanho**: Protocolo simples e depurável com enquadramento confiável
 > - **I/O com threads**: Design não-bloqueante mantém o loop do jogo responsivo
 > - **Desconexão**: Tratamento limpo de falhas de rede com feedback ao usuário
 
 ---
 
-*Documentação para Ultra-Pong v1.0*
+## Changelog
+
+### v1.1 (Dezembro 2024)
+- **Sincronização de posição dos paddles**: Adicionado `paddle_y` às mensagens de input
+- **Game state estendido**: Adicionados campos `p1_y` e `p2_y` para posições dos paddles
+- **Interpolação de paddles**: Cliente e host agora aplicam posições com lerp 0.5
+- **Correção de bug**: Bola não mais "atravessa" o paddle durante lag
+
+### v1.0 (Dezembro 2024)
+- Implementação inicial do sistema de rede
+- Arquitetura cliente-servidor com TCP
+- Suporte a multiplayer 1v1
+
+---
+
+*Documentação para Ultra-Pong v1.1*
