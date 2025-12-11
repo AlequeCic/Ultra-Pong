@@ -2,6 +2,8 @@ import pygame
 from settings import *
 from player import *  
 from gamestate import *
+from playingstate import *
+from audio_manager import init_audio, get_audio_manager
 from playingstate import PlayingState
 from menustate import MainMenuState
 from menu_state.optionsstate import OptionsState
@@ -17,6 +19,10 @@ class Game:
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         self.clock = pygame.time.Clock()
         pygame.display.set_caption("Ultra Pong")
+        
+        # Initialize audio system
+        init_audio()
+        get_audio_manager().play_main_theme(fade_ms=1000)
 
         # state manager
         self.state_manager = StateManager(self.screen) 
@@ -54,4 +60,5 @@ class Game:
             pygame.display.update()
         
         #finishing the game
+        get_audio_manager().cleanup()
         pygame.quit()
