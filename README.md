@@ -226,7 +226,7 @@ Esse conjunto de mensagens é suficiente para sincronizar o jogo entre host e cl
 
 ---
 
-# 4. Requisitos Mínimos
+# 3. Requisitos Mínimos
 
 ## Para Host
 
@@ -242,7 +242,7 @@ Esse conjunto de mensagens é suficiente para sincronizar o jogo entre host e cl
 
 ---
 
-# 5. Como Executar
+# 4. Como Executar
 
 Siga os passos abaixo para executar o Ultra Pong pela primeira vez:
 
@@ -305,7 +305,7 @@ O Ultra Pong abrirá com o menu principal e você poderá escolher:
 
 ---
 
-# 6. Estrutura do Projeto
+# 5. Estrutura do Projeto
 
 ```
 Ultra-Pong/
