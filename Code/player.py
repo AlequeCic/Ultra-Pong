@@ -347,5 +347,9 @@ class Ball(pygame.sprite.Sprite):
     def update(self, dt):
         self.old_rect = self.rect.copy()
         self._update_trail(dt)
+        # allow clients to render trail without advancing physics when frozen
+        if self.is_frozen:
+            return
+
         self.move(dt)
         self.wall_collision()

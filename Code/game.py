@@ -1,10 +1,18 @@
+import pygame
 from settings import *
-from player import *
+from player import *  
 from gamestate import *
 from playingstate import *
 from audio_manager import init_audio, get_audio_manager
+from playingstate import PlayingState
+from menustate import MainMenuState
+from menu_state.optionsstate import OptionsState
+from menu_state.multiplayerstate import MultiplayerModeState, MultiplayerHostJoinState
+from menu_state.waitingstate import WaitingForPlayersState
+from menu_state.joinstate import JoinState
 
-#abstraction layer of th game loop
+
+# abstraction layer of the game loop
 class Game:
     def __init__(self):
         pygame.init()
@@ -16,14 +24,20 @@ class Game:
         init_audio()
         get_audio_manager().play_main_theme(fade_ms=1000)
 
-        #state manager
+        # state manager
         self.state_manager = StateManager(self.screen) 
-        
-        #registering all states
-        self.state_manager.register_state(StateID.PLAYING, PlayingState)
 
-        #starter state
-        self.state_manager.change_state(StateID.PLAYING) #in this case playing the game
+        # registering all states
+        self.state_manager.register_state(StateID.MAIN_MENU, MainMenuState)
+        self.state_manager.register_state(StateID.OPTIONS, OptionsState)
+        self.state_manager.register_state(StateID.PLAYING, PlayingState)
+        self.state_manager.register_state(StateID.MULTI_MODE, MultiplayerModeState)
+        self.state_manager.register_state(StateID.MULTI_HOST_JOIN, MultiplayerHostJoinState)
+        self.state_manager.register_state(StateID.WAITING, WaitingForPlayersState)
+        self.state_manager.register_state(StateID.JOIN, JoinState)
+
+        # starter state
+        self.state_manager.change_state(StateID.MAIN_MENU)
     
     def run(self):
         while self.state_manager.running:
@@ -36,7 +50,7 @@ class Game:
             for event in events:
                 if event.type == pygame.QUIT:
                     self.state_manager.quit()
-            #update
+
             self.state_manager.handle_events(events)
             self.state_manager.update(dt)
             self.state_manager.draw()
