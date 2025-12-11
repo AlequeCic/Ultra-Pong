@@ -198,168 +198,31 @@ Main Menu
 
 # 2. Protocolo da Camada de Aplicação
 
-O protocolo utiliza **JSON** dentro de um fluxo **TCP** com framing.
+O Ultra Pong utiliza um protocolo simples baseado em JSON enviado via TCP.  
+Cada mensagem segue o formato:
 
-Formato base:
+    {
+      "type": "<tipo>",
+      "payload": { ... }
+    }
 
-```json
-{
-  "type": "<tipo_da_mensagem>",
-  "payload": { ... }
-}
-````
+Para evitar mensagens coladas no fluxo TCP, cada envio começa com 4 bytes indicando o tamanho do JSON.
 
----
+As principais mensagens são:
 
-## 2.1. Framing (Separação de Mensagens)
+### Cliente → Servidor
+- **input**: envia direção da raquete (`-1`, `0`, `1`)
+- **pause_request**: solicita pausa ou despausa
 
-Cada envio segue:
+### Servidor → Cliente
+- **welcome / assign_player**: identifica cada jogador
+- **game_start**: início da partida
+- **game_state**: snapshot contendo posição da bola, placar e estado do jogo
+- **opponent_input**: repassa direção do oponente
+- **pause_state**: sincroniza pausa
+- **client_disconnected**: finaliza o jogo se alguém cair
 
-```
-4 bytes → tamanho da mensagem JSON
-N bytes → conteúdo JSON serializado
-```
-
-Isso evita problemas de "pacotes colados" ou incompletos no TCP.
-
----
-
-## 2.2. Mensagens Cliente → Servidor
-
-### **input**
-
-```json
-{
-  "type": "input",
-  "direction": -1 | 0 | 1
-}
-```
-
-### **pause_request**
-
-```json
-{
-  "type": "pause_request",
-  "paused": true/false
-}
-```
-
----
-
-## 2.3. Mensagens Servidor → Cliente
-
-### **welcome**
-
-```json
-{
-  "type": "welcome",
-  "player_id": 1
-}
-```
-
-### **assign_player**
-
-```json
-{
-  "type": "assign_player",
-  "player_id": 2
-}
-```
-
-### **game_start**
-
-Indica que ambos estão sincronizados para iniciar.
-
----
-
-### **game_state**
-
-Snapshot completo do host:
-
-```json
-{
-  "type": "game_state",
-  "ball_x": ...,
-  "ball_y": ...,
-  "ball_dx": ...,
-  "ball_dy": ...,
-  "ball_speed": ...,
-  "score_t1": ...,
-  "score_t2": ...,
-  "phase": "...",
-  "tick": ...,
-  "countdown_end": ...
-}
-```
-
----
-
-### **opponent_input**
-
-```json
-{
-  "type": "opponent_input",
-  "direction": -1 | 0 | 1
-}
-```
-
----
-
-### **pause_state**
-
-```json
-{
-  "type": "pause_state",
-  "paused": true/false,
-  "initiator": "host" | "client"
-}
-```
-
----
-
-### **client_disconnected**
-
-```json
-{
-  "type": "client_disconnected"
-}
-```
-
----
-
-# 3. Mecânicas Internas do Jogo
-
-## 3.1. Física da Bola
-
-A bola possui:
-
-* aceleração progressiva
-* colisão angular dependendo da posição da raquete
-* trilha visual dinâmica
-* reinício com countdown sincronizado
-
----
-
-## 3.2. Jogadores e Raquetes
-
-As raquetes possuem:
-
-* aceleração gradual
-* atrito exponencial
-* sistema de *charge shot*
-* limites verticais de movimentação
-
----
-
-## 3.3. Interpolação no Cliente
-
-Para suavizar discrepâncias entre snapshots:
-
-```
-posição_final = lerp(posição_atual, posição_recebida, fator)
-```
-
-Isso suaviza saltos devido à latência.
+Esse conjunto de mensagens é suficiente para sincronizar o jogo entre host e cliente.
 
 ---
 
@@ -381,10 +244,53 @@ Isso suaviza saltos devido à latência.
 
 # 5. Como Executar
 
+Siga os passos abaixo para executar o Ultra Pong pela primeira vez:
+
+### 1. Acesse a pasta do projeto
+```
+cd Ultra-Pong
+```
+### 2. Crie um ambiente virtual
+```
+python -m venv venv
+```
+### 🔹 3. Ative o ambiente virtual
+
+#### ✔ Windows
+```
+venv\Scripts\activate
+```
+#### ✔ macOS / Linux
+```
+source venv/bin/activate
+```
+### 🔹 4. Instale as dependências necessárias
+```
+pip install pygame-ce
+```
+### 🔹 5. Acesse a pasta onde está o código do jogo
+```
+cd code
+```
+### 🔹 6. Execute o jogo
+#### Windows
+```
+python main.py
+```
+#### macOS / Linux
+```
+python3 main.py
+```
+
+### 🟢 Pronto!
+O Ultra Pong abrirá com o menu principal e você poderá escolher:
+- Jogar localmente  
+- Ser o Host  
+- Entrar como Cliente  
+
 ## 🟦 Executar como Host
 
 ```
-python main.py
 → Multiplayer Mode
 → Host Game
 ```
@@ -392,7 +298,6 @@ python main.py
 ## 🟩 Executar como Cliente
 
 ```
-python main.py
 → Multiplayer Mode
 → Join Game
 → Digitar IP e Porta do Host
@@ -403,42 +308,44 @@ python main.py
 # 6. Estrutura do Projeto
 
 ```
-/
-├── game.py
-├── gamestate.py
-├── playingstate.py
-├── player.py
-├── world.py
-├── settings.py
-├── states/
-│   ├── mainmenustate.py
-│   ├── optionsstate.py
-│   ├── joinstate.py
-│   ├── waitingstate.py
-│   ├── multiplayerstate.py
-├── network/
-│   ├── server.py
-│   ├── client.py
-│   ├── network_handler.py
-│   ├── network_input.py
-└── assets/
-```
-
----
-
-# 7. Considerações Finais
-
-Ultra Pong demonstra:
-
-* arquitetura modular e organizada
-* implementação prática do modelo cliente-servidor
-* protocolo próprio sobre TCP
-* sincronização consistente do gameplay
-* manipulação real de latência
-* menus, estados e experiência completa de jogo
-
-O projeto cumpre totalmente os objetivos da disciplina **Redes de Computadores I**, servindo como referência sólida para estudos de aplicações distribuídas.
-
+Ultra-Pong/
+├── Code/
+│ ├── Assets/
+│ │ ├── MUSIC/
+│ │ ├── SFX/
+│ │ └── last_goal.mp3
+│ │
+│ ├── menu_state/
+│ │ ├── joinstate.py
+│ │ ├── multiplayerstate.py
+│ │ ├── optionsstate.py
+│ │ ├── pause.py
+│ │ ├── ui.py
+│ │ └── waitingstate.py
+│ │
+│ ├── network/
+│ │ ├── client.py
+│ │ ├── network_handler.py
+│ │ ├── network_input.py
+│ │ ├── server.py
+│ │ ├── audio_manager.py
+│ │ ├── networksync.py
+│ │ └── init.py
+│ │
+│ ├── game.py
+│ ├── gamestate.py
+│ ├── inputhandler.py
+│ ├── main.py
+│ ├── menustate.py
+│ ├── player.py
+│ ├── playingstate.py
+│ ├── settings.py
+│ └── world.py
+│
+├── docs/
+│ └── NETWORK_DOCUMENTATION.md
+│
+└── venv/
 ```
 
 
