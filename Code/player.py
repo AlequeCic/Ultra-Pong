@@ -221,11 +221,11 @@ class Ball(pygame.sprite.Sprite):
         #limiting value bet -1 and 1
         relative_intersect_y = max(-1, min(1,relative_intersect_y))
 
-        smooth_intersect = relative_intersect_y * abs(relative_intersect_y)
-        #defining angle
-        max_bounce_angle = pi/3
+        # Pong-style: curva linear para ângulos mais agressivos
+        # Sem suavização quadrática - rebatida nas pontas = ângulo extremo
+        max_bounce_angle = 5 * pi / 12  # 75° (mais angulado que antes)
 
-        bounce_angle = smooth_intersect * max_bounce_angle
+        bounce_angle = relative_intersect_y * max_bounce_angle
 
         #finding which team is the paddle from
         if paddle.rect.centerx < WINDOW_WIDTH / 2:
