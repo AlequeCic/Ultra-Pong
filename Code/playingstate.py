@@ -298,10 +298,8 @@ class PlayingState(BaseState):
             if self.world.maybe_resume():
                 # Countdown terminou - forçar despause sem rearmar countdown
                 if self.pause_manager:
-                    # Apenas resetar o estado interno sem chamar set_pause
-                    # (que tentaria criar outro countdown)
-                    self.pause_manager.paused = False
-                    self.pause_manager.pause_initiator = None
+                    # Usar método público para completar o countdown
+                    self.pause_manager.complete_countdown()
             return
         
         # Se estiver pausado, não avança simulação
