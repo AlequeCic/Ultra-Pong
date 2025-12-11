@@ -1,7 +1,7 @@
 # 🌐 Documentação da Arquitetura de Rede do Ultra-Pong
 
 > **Versão:** 1.1  
-> **Última Atualização:** Dezembro 2024  
+> **Última Atualização:** Dezembro 2025  
 > **Autores:** Equipe de Desenvolvimento Ultra-Pong
 
 ---
