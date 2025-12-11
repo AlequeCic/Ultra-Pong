@@ -350,7 +350,18 @@ Ultra-Pong/
 │
 └── venv/
 ```
+## 5. Documentação do Projeto
 
+Para manter o README principal enxuto e organizado, toda a documentação técnica detalhada do Ultra Pong foi separada em arquivos individuais dentro da pasta `docs/`.  
+Nela o professor encontrará descrições completas de cada subsistema do jogo, incluindo áudio, gameplay, rede, menus e máquina de estados, e você poderá acessá-los pelos links abaixo.
+
+### 📁 Documentação Técnica
+
+- 🎧 [Sistema de Áudio](docs/AUDIO_SYSTEM_DOCUMENTATION.md)
+- 🕹️ [Gameplay](docs/GAMEPLAY_DOCUMENTATION.md)
+- 📋 [Menus](docs/Menu_documentation.md)
+- 🌐 [Networking](docs/NETWORK_DOCUMENTATION.md)
+- 🔄 [State Machine](docs/STATE_SYSTEM_DOCUMENTATION.md)
 
 
 
