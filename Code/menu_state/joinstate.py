@@ -2,8 +2,6 @@ import os
 import ipaddress
 from gamestate import BaseState, StateID
 from network.network_handler import NetworkHandler
-from settings import *
-
 class JoinState(BaseState):
     def __init__(self, state_manager):
         super().__init__(state_manager)
@@ -94,6 +92,9 @@ class JoinState(BaseState):
         # Validate IP address format first
         if not self._validate_ip(self.ip_text):
             self.error_message = "Invalid IP address format"
+        # Check if port is empty
+        if not self.port_text:
+            self.error_message = "Port cannot be empty"
             return
         
         try:
