@@ -229,11 +229,10 @@ class PlayingState(BaseState):
         
         # Check if any team reached 3 points - switch to high intensity music
         if self.world:
-            if self.world.score[side] >= 3:
-                get_audio_manager().play_gameplay_music(intensity="high", fade_ms=1000)
             if self.world.score[side] >= 7:
                 get_audio_manager().play_gameplay_music(intensity="last_goal", fade_ms=1000)
-            
+            if self.world.score[side] >= 3:
+                get_audio_manager().play_gameplay_music(intensity="high", fade_ms=1000)
         
         if self.ball:
             # put the ball in the middle and randomize its direction
