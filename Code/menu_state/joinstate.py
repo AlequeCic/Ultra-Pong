@@ -74,6 +74,11 @@ class JoinState(BaseState):
                                 self.port_text += char
 
     def _try_connect(self):
+        # Check if port is empty
+        if not self.port_text:
+            self.error_message = "Port cannot be empty"
+            return
+        
         try:
             port = int(self.port_text)
             network = NetworkHandler()
