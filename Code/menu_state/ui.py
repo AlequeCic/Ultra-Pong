@@ -102,9 +102,6 @@ class ScoreDisplay:
         """Atualiza o placar e reinicia o countdown"""
         self.world.score[side] += 1
         self.world.start_countdown(3.0, FPS)  # 3 seconds
-        
-        # Play goal sound
-        get_audio_manager().play_goal(side)
     
     def draw(self):
         """Desenha o placar na tela"""

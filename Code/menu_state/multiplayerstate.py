@@ -1,5 +1,6 @@
 from settings import *
 from gamestate import BaseState, StateID
+from audio_manager import get_audio_manager
 import os
 import math
 from network.network_handler import NetworkHandler
@@ -54,9 +55,12 @@ class MultiplayerModeState(BaseState):
             if event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_UP, pygame.K_w):
                     self.current_index = (self.current_index - 1) % len(self.options)
+                    get_audio_manager().play_menu_hover()
                 elif event.key in (pygame.K_DOWN, pygame.K_s):
                     self.current_index = (self.current_index + 1) % len(self.options)
+                    get_audio_manager().play_menu_hover()
                 elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                    get_audio_manager().play_menu_click()
                     self._activate_option()
                 elif event.key == pygame.K_ESCAPE:
                     self.state_manager.change_state(StateID.MAIN_MENU)
@@ -195,13 +199,14 @@ class MultiplayerModeState(BaseState):
             self.screen.blit(option_surf, option_rect)
 
             if is_selected:
-                # cursor "paddle"
-                cursor_h = option_rect.height - 6
+                # cursor animated
+                offset = 6 * math.sin(self.time * 6)
+                cursor_height = option_rect.height - 8
                 cursor_rect = pygame.Rect(
-                    option_rect.left - 26,
-                    option_rect.centery - cursor_h // 2,
+                    option_rect.left - 24 + offset,
+                    option_rect.centery - cursor_height // 2,
                     10,
-                    cursor_h
+                    cursor_height
                 )
                 pygame.draw.rect(self.screen, self.highlight_color, cursor_rect, border_radius=3)
 
@@ -264,9 +269,12 @@ class MultiplayerHostJoinState(BaseState):
             if event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_UP, pygame.K_w):
                     self.current_index = (self.current_index - 1) % len(self.options)
+                    get_audio_manager().play_menu_hover()
                 elif event.key in (pygame.K_DOWN, pygame.K_s):
                     self.current_index = (self.current_index + 1) % len(self.options)
+                    get_audio_manager().play_menu_hover()
                 elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                    get_audio_manager().play_menu_click()
                     self._activate_option()
                 elif event.key == pygame.K_ESCAPE:
                     # volta pra escolha de modo
@@ -398,13 +406,14 @@ class MultiplayerHostJoinState(BaseState):
             self.screen.blit(option_surf, option_rect)
 
             if is_selected:
-                # cursor paddle
-                cursor_h = option_rect.height - 6
+                # cursor animated
+                offset = 6 * math.sin(self.time * 6)
+                cursor_height = option_rect.height - 8
                 cursor_rect = pygame.Rect(
-                    option_rect.left - 26,
-                    option_rect.centery - cursor_h // 2,
+                    option_rect.left - 24 + offset,
+                    option_rect.centery - cursor_height // 2,
                     10,
-                    cursor_h
+                    cursor_height
                 )
                 pygame.draw.rect(self.screen, self.highlight_color, cursor_rect, border_radius=3)
 

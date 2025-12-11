@@ -1,4 +1,6 @@
 from settings import *
+from audio_manager import get_audio_manager
+import math
 
 class PauseMenu:
     def __init__(self, screen, title_font, option_font, small_font):
@@ -20,6 +22,9 @@ class PauseMenu:
         self.pause_dots = ""
         self.dot_timer = 0.0
         self.dot_interval = 0.5
+        
+        # Time for cursor animation
+        self.time = 0.0
     
     def update_dot_animation(self, dt):
         self.dot_timer += dt
@@ -32,15 +37,21 @@ class PauseMenu:
             if event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_UP, pygame.K_w):
                     self.index = (self.index - 1) % len(self.pause_options)
+                    get_audio_manager().play_menu_hover()
                 elif event.key in (pygame.K_DOWN, pygame.K_s):
                     self.index = (self.index + 1) % len(self.pause_options)
+                    get_audio_manager().play_menu_hover()
                 elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                    get_audio_manager().play_menu_click()
                     return self.pause_options[self.index]
                 elif event.key == pygame.K_ESCAPE:
                     return "Resume"
         return None
     
-    def draw(self, center_x, center_y, title_text="PAUSED", show_options=True, show_dots=False):
+    def draw(self, center_x, center_y, title_text="PAUSED", show_options=True, show_dots=False, dt=0.0):
+        # Update animation time
+        self.time += dt
+        
         # Overlay escuro
         overlay = pygame.Surface((self.screen.get_width(), self.screen.get_height()), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
@@ -93,9 +104,11 @@ class PauseMenu:
                 self.screen.blit(option_surf, option_rect)
                 
                 if selected:
-                    cursor_height = option_rect.height - 6
+                    # Animated cursor
+                    offset = 6 * math.sin(self.time * 6)
+                    cursor_height = option_rect.height - 8
                     cursor_rect = pygame.Rect(
-                        option_rect.left - 26,
+                        option_rect.left - 24 + offset,
                         option_rect.centery - cursor_height // 2,
                         10,
                         cursor_height

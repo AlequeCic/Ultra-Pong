@@ -19,9 +19,9 @@ class AudioManager:
             self.sfx: Dict[str, pygame.mixer.Sound] = {}
             self.volumes = {
                 "master": 1.0,
-                "sfx": 0.8,
-                "music": 0.6,
-                "ui": 0.7
+                "sfx": 0.7,
+                "music": 0.5,
+                "ui": 0.6
             }
             self.current_music = None
             self.current_intensity = None  # Track current music intensity
@@ -202,6 +202,14 @@ class AudioManager:
         """play goal sound"""
         self.play_sfx("goal", volume=0.9, category="ui")
     
+    def play_menu_hover(self):
+        """ play when the menu option change"""
+        self.play_sfx("menu_hover", volume=0.5)
+
+    def play_menu_click(self):
+        """ play when the menu option is chose"""
+        self.play_sfx("menu_click", volume=0.6)
+    
     # Music methods 
     
     def play_main_theme(self, fade_ms: int = 1000):
@@ -269,6 +277,8 @@ def init_audio():
         "countdown_321": join(base_path, "countdown321.mp3"),
         "countdown_go": join(base_path, "countdown_go.mp3"),
         "goal": join(base_path, "goal.mp3"),
+        "menu_click": join(base_path, "menu_click.mp3"),
+        "menu_hover": join(base_path, "menu_hover.mp3"),
     }
     
     loaded = 0

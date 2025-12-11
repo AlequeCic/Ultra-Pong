@@ -32,6 +32,9 @@ class PlayingState(BaseState):
         self.opponent_disconnected = False
         self.disconnect_timer = 0.0
         self.disconnect_message_duration = 3.0  # Show message for 3 seconds before returning to menu
+        
+        # Track dt for animations
+        self.last_frame_dt = 0.0
 
         # Pause control - managed by PauseManager (single source of truth)
         # Use self._get_pause_state() to access current pause state
@@ -221,6 +224,17 @@ class PlayingState(BaseState):
     def update_score(self, side):
         if self.score_display:
             self.score_display.update_score(side)
+        # Play goal sound
+        get_audio_manager().play_goal(side)
+        
+        # Check if any team reached 3 points - switch to high intensity music
+        if self.world:
+            if self.world.score[side] >= 3:
+                get_audio_manager().play_gameplay_music(intensity="high", fade_ms=1000)
+            if self.world.score[side] >= 7:
+                get_audio_manager().play_gameplay_music(intensity="last_goal", fade_ms=1000)
+            
+        
         if self.ball:
             # put the ball in the middle and randomize its direction
             self.ball.reset()
@@ -266,7 +280,7 @@ class PlayingState(BaseState):
         
         # overlay de pause por cima de tudo
         if paused and initiator == "local":
-            self.pause_menu.draw(center_x, center_y)
+            self.pause_menu.draw(center_x, center_y, dt=self.last_frame_dt)
 
         #pause notification
         elif paused and initiator == "remote":
@@ -277,6 +291,9 @@ class PlayingState(BaseState):
             self.disconnect_msg.draw(center_x, center_y, self.disconnect_timer, self.disconnect_message_duration)
 
     def update(self, dt):
+        # Store dt for animations
+        self.last_frame_dt = dt
+        
         # Check for opponent disconnect
         if self.network and not self.opponent_disconnected:
             if not self.network.is_opponent_connected():
@@ -315,6 +332,7 @@ class PlayingState(BaseState):
                     # (que tentaria criar outro countdown)
                     self.pause_manager.paused = False
                     self.pause_manager.pause_initiator = None
+                    get_audio_manager().play_launch()
             return
         
         # Se estiver pausado, não avança simulação

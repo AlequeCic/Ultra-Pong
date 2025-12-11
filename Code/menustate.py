@@ -1,5 +1,6 @@
 from settings import *
 from gamestate import BaseState, StateID
+from audio_manager import get_audio_manager
 import pygame
 import os
 import math
@@ -45,15 +46,19 @@ class MainMenuState(BaseState):
     def enter(self, **kwargs):
         self.current_index = 0
         self.time = 0
+        get_audio_manager().play_main_theme()
 
     def handle_events(self, events):
         for event in events:
             if event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_UP, pygame.K_w):
                     self.current_index = (self.current_index - 1) % len(self.options)
+                    get_audio_manager().play_menu_hover()
                 elif event.key in (pygame.K_DOWN, pygame.K_s):
                     self.current_index = (self.current_index + 1) % len(self.options)
+                    get_audio_manager().play_menu_hover()
                 elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                    get_audio_manager().play_menu_click()
                     self._activate_option()
                 elif event.key == pygame.K_ESCAPE:
                     self.state_manager.quit()

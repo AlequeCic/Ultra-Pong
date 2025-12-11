@@ -1,6 +1,7 @@
 import os
 from gamestate import BaseState, StateID
 from network.network_handler import NetworkHandler
+from audio_manager import get_audio_manager
 from settings import *
 
 class JoinState(BaseState):
@@ -52,9 +53,11 @@ class JoinState(BaseState):
                 
                 elif event.key == pygame.K_TAB:
                     # Changing camps
+                    get_audio_manager().play_menu_hover()
                     self.active_field = "port" if self.active_field == "ip" else "ip"
                 
                 elif event.key == pygame.K_RETURN:
+                    get_audio_manager().play_menu_click()
                     self._try_connect()
                 
                 elif event.key == pygame.K_BACKSPACE:
