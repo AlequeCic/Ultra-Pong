@@ -52,11 +52,15 @@ class Paddle(pygame.sprite.Sprite):
                 if self.rect.top < 0:
                     self.rect.top = 0
                     self.vel = -self.vel*2/3
-                    get_audio_manager().play_paddle_hit()
+                    # Pan sound based on paddle horizontal position
+                    pan = -0.5 + (self.rect.centerx / WINDOW_WIDTH)
+                    get_audio_manager().play_paddle_hit(pan=pan)
                 elif self.rect.bottom > WINDOW_HEIGHT:
                     self.rect.bottom = WINDOW_HEIGHT
                     self.vel = -self.vel*2/3
-                    get_audio_manager().play_paddle_hit()
+                    # Pan sound based on paddle horizontal position
+                    pan = -0.5 + (self.rect.centerx / WINDOW_WIDTH)
+                    get_audio_manager().play_paddle_hit(pan=pan)
                 #friction
                 if self.vel > 0:
                     #self.vel-= self.deceleration*dt
@@ -164,16 +168,16 @@ class Ball(pygame.sprite.Sprite):
         if self.rect.top < 0:
             self.rect.top = 0
             self.direction.y *=-1
-            # pan based on ball horizontal position (-0.7 left to 0.7 right)
-            pan = -0.7 + (self.rect.centerx / WINDOW_WIDTH) * 1.4
+            # pan based on ball horizontal position (-0.8 left to 0.8 right)
+            pan = -0.4 + (self.rect.centerx / WINDOW_WIDTH) * 0.8
             get_audio_manager().play_wall_hit(pan=pan)
         
         #bottom windows collision
         if self.rect.bottom > WINDOW_HEIGHT:
             self.rect.bottom = WINDOW_HEIGHT
             self.direction.y *= -1
-            # pan based on ball horizontal position (-0.7 left to 0.7 right)
-            pan = -0.7 + (self.rect.centerx / WINDOW_WIDTH) * 1.4
+            # pan based on ball horizontal position (-0.8 left to 0.8 right)
+            pan = -0.4 + (self.rect.centerx / WINDOW_WIDTH) * 0.8
             get_audio_manager().play_wall_hit(pan=pan)
 
         #getting score
@@ -348,8 +352,6 @@ class Ball(pygame.sprite.Sprite):
         self.old_rect = self.rect.copy()
         self._update_trail(dt)
         # allow clients to render trail without advancing physics when frozen
-        if self.is_frozen:
-            return
 
         self.move(dt)
         self.wall_collision()

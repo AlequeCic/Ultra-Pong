@@ -1,4 +1,5 @@
 from settings import *
+from audio_manager import get_audio_manager
 
 # countdown.py
 import pygame
@@ -30,7 +31,13 @@ class CountdownDisplay:
             if self.world.pause_countdownEndTick is not None:
                 remaining_ticks = self.world.pause_countdownEndTick - self.world.tick
                 secs_left = remaining_ticks / FPS
-                self.current_value = int(secs_left) + 1
+                new_value = int(secs_left) + 1
+                
+                # Play countdown sound when value changes
+                if new_value != self.current_value and 1 <= new_value <= 3:
+                    get_audio_manager().play_countdown(new_value)
+                
+                self.current_value = new_value
                 self.message = "Game resuming in"
                 self.color = "yellow"
                 self.is_visible = True
@@ -42,7 +49,13 @@ class CountdownDisplay:
         if self.world.phase == "countdown":
             remaining_ticks = self.world.countdownEndTick - self.world.tick
             secs_left = remaining_ticks / FPS
-            self.current_value = int(secs_left) + 1
+            new_value = int(secs_left) + 1
+            
+            # Play countdown sound when value changes
+            if new_value != self.current_value and 1 <= new_value <= 3:
+                get_audio_manager().play_countdown(new_value)
+            
+            self.current_value = new_value
             self.message = ""
             self.color = "white"
             self.is_visible = True
@@ -89,6 +102,9 @@ class ScoreDisplay:
         """Atualiza o placar e reinicia o countdown"""
         self.world.score[side] += 1
         self.world.start_countdown(3.0, FPS)  # 3 seconds
+        
+        # Play goal sound
+        get_audio_manager().play_goal(side)
     
     def draw(self):
         """Desenha o placar na tela"""

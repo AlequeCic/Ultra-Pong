@@ -36,26 +36,30 @@ class PlayingState(BaseState):
         # Pause control - managed by PauseManager (single source of truth)
         # Use self._get_pause_state() to access current pause state
 
-        # debug
-        self.frame_times = []
-        self.max_frame_samples = 240
-        self.last_substeps = 0
-        self.last_dt = 0.0
-        self.debug_font = pygame.font.Font(None, 24)
-
-    def enter(self, game_mode="local"):
-        #pygame.mouse.set_visible(False)
-        self.game_mode = game_mode
+        # fontes do menu de pausa
+        font_path = "8-BIT WONDER.TTF"
+        if os.path.exists(font_path):
+            pause_title_font = pygame.font.Font(font_path, 56)
+            pause_option_font = pygame.font.Font(font_path, 28)
+            pause_small_font = pygame.font.Font(font_path, 18)
+        else:
+            pause_title_font = pygame.font.Font(None, 56)
+            pause_option_font = pygame.font.Font(None, 28)
+            pause_small_font = pygame.font.Font(None, 18)
         
-        # Start gameplay music
-        get_audio_manager().play_gameplay_music(intensity="normal", fade_ms=500)
-
         # Instanciar as classes de UI
         self.pause_menu = PauseMenu(self.screen, pause_title_font, pause_option_font, pause_small_font)
         self.remote_pause_msg = RemotePauseMessage(self.screen, pause_title_font, pause_option_font, pause_small_font)
         self.disconnect_msg = DisconnectMessage(self.screen, pause_title_font, pause_small_font)
         self.countdown_display = CountdownDisplay(self.screen, None)  # world será setado em enter()
         self.score_display = ScoreDisplay(self.screen, None)  # world será setado em enter()
+
+        # debug
+        self.frame_times = []
+        self.max_frame_samples = 240
+        self.last_substeps = 0
+        self.last_dt = 0.0
+        self.debug_font = pygame.font.Font(None, 24)
 
     def enter(self, game_mode="local", network = None):
         # pygame.mouse.set_visible(False)
@@ -100,6 +104,9 @@ class PlayingState(BaseState):
 
         # Inicializar NetworkSync
         self.network_sync = NetworkSync(self.network, self.ball, self.world, self.players)
+
+        # Start gameplay music
+        get_audio_manager().play_gameplay_music(intensity="normal", fade_ms=500)
 
         self.world.start_countdown(3.0, FPS)  # 3 second countdown
 
